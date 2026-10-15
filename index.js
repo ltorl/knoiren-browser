@@ -12,8 +12,7 @@
 // address as the browser sees it; only that origin may run bookmarklets in pages.
 //
 // Everything is in this one file: the HTTP servers, the proxy, a small HTML
-// rewriter, the script injected into every page and the UI page. cloudflare.js
-// is the same proxy as a Cloudflare Worker.
+// rewriter, the script injected into every page and the UI page.
 import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
@@ -2581,7 +2580,7 @@ function banner() {
   return [
     '',
     ...logo.map(l => '  ' + shade(l)),
-    dim('  browser · peekaboom proxy'),
+    dim('  proxy browser'),
     '',
     row(rgb(74, 222, 128)('●'), 'Open', uiUrl),
     row(rgb(96, 165, 250)('●'), 'Proxy', proxyUrl),
