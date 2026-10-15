@@ -899,7 +899,7 @@ class Tag {
   }
 }
 
-const NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+const NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 
 function decodeEntities(s) {
   if (!s.includes('&')) return s;
@@ -2551,8 +2551,9 @@ const uiServer = http.createServer(async (req, res) => {
   res.writeHead(404, { 'content-type': 'text/plain' }).end('Not found');
 });
 
-// Imported (e.g. by index.test.js) it only provides the exports below.
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Imported (e.g. by index.test.js) it only provides the exports below. Run
+// directly, or piped in (`curl … | node`, where there is no script path), it serves.
+if (!process.argv[1] || import.meta.url === pathToFileURL(process.argv[1]).href) {
   let listening = 0;
   const ready = () => { if (++listening === 2) console.log(banner()); };
   server.listen(PORT, HOST, ready);
