@@ -1,7 +1,6 @@
 <div align="center">
-  
-<img width="760" height="224" alt="banner" src="https://github.com/user-attachments/assets/fc727559-8d25-4f52-a5cc-7d40dfdb8d37" />
 
+<img width="760" height="224" alt="banner" src="https://github.com/user-attachments/assets/160bae9d-e74c-4b9c-9b7f-b510d86442ce" />
 
 ### A whole web browser and proxy in one file.
 
