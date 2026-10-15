@@ -4,7 +4,7 @@ On certain tests it can even outperform Scramjet.
 
 ## How to run
 
-Must have Node js installed
+Must have Node js 20.19+ installed
 
 ```bash
 curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | node
