@@ -19,9 +19,12 @@ import net from 'node:net';
 import zlib from 'node:zlib';
 import tls from 'node:tls';
 import dns from 'node:dns/promises';
-import { Readable } from 'node:stream';
+import fs from 'node:fs';
+import os from 'node:os';
+import { Transform, pipeline } from 'node:stream';
 import vm from 'node:vm';
 import crypto from 'node:crypto';
+import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
 import { pathToFileURL } from 'node:url';
 
 const PORT = Number(process.env.PORT) || 8787;
@@ -32,7 +35,7 @@ const UI_ORIGIN = process.env.UI_ORIGIN ? process.env.UI_ORIGIN.replace(/\/+$/, 
 const PREFIX = '/__px/';
 const ORIGIN_COOKIE = '__px_origin';
 const UPSTREAM_TIMEOUT_MS = 100_000; // time to response headers; slow origins can take 30s+
-const MAX_BUFFERED_BYTES = 16 * 1024 * 1024; // HTML / CSS rewriting buffers the body
+const MAX_BUFFERED_BYTES = 16 * 1024 * 1024; // CSS / JS rewriting buffers the body (HTML streams)
 
 const DROP_REQUEST_HEADERS = new Set([
   'host', 'connection', 'keep-alive', 'proxy-connection', 'te', 'trailer', 'transfer-encoding',
@@ -56,11 +59,27 @@ const DROP_RESPONSE_HEADERS = [
 async function checkHost(hostname) {
   let addrs;
   try {
-    addrs = await dns.lookup(hostname, { all: true, verbatim: true });
+    addrs = await lookupAll(hostname);
   } catch {
     return null; // let fetch report the DNS failure
   }
   return addrs.some((a) => isPrivate(a.address)) ? `${hostname} resolves to a private address.` : null;
+}
+
+// getaddrinfo runs on libuv's small thread pool (shared with zlib and crypto)
+// and every request needs an answer, so keep results briefly.
+const DNS_TTL_MS = 30_000;
+const dnsCache = new Map(); // hostname -> { at, p: Promise<addrs> }
+
+function lookupAll(hostname) {
+  const hit = dnsCache.get(hostname);
+  if (hit && Date.now() - hit.at < DNS_TTL_MS) return hit.p;
+  const p = dns.lookup(hostname, { all: true, verbatim: true });
+  p.catch(() => dnsCache.delete(hostname));
+  dnsCache.delete(hostname);
+  dnsCache.set(hostname, { at: Date.now(), p });
+  if (dnsCache.size > 1000) dnsCache.delete(dnsCache.keys().next().value);
+  return p;
 }
 
 function isPrivate(ip) {
@@ -77,15 +96,17 @@ function isPrivate(ip) {
 
 // Refuse private addresses at connect time too, so DNS rebinding can't slip past checkHost.
 function safeLookup(hostname, options, callback) {
-  dns.lookup(hostname, { ...options, all: true }).then((addrs) => {
-    const bad = addrs.find((a) => isPrivate(a.address));
+  lookupAll(hostname).then((all) => {
+    const bad = all.find((a) => isPrivate(a.address));
     if (bad) return callback(new Error(`${hostname} resolves to a private address.`));
+    const addrs = options.family === 4 || options.family === 6 ? all.filter((a) => a.family === options.family) : all;
+    if (!addrs.length) return callback(Object.assign(new Error(`getaddrinfo ENOTFOUND ${hostname}`), { code: 'ENOTFOUND' }));
     if (options.all) return callback(null, addrs);
     callback(null, addrs[0].address, addrs[0].family);
   }, callback);
 }
 
-const agentOpts = { keepAlive: true, lookup: safeLookup };
+const agentOpts = { keepAlive: true, lookup: safeLookup, maxCachedSessions: 1000 };
 const agents = { 'http:': new http.Agent(agentOpts), 'https:': new https.Agent(agentOpts) };
 
 // Many servers send an incomplete certificate chain. Browsers fill the gap by
@@ -151,7 +172,7 @@ const DECODERS = {
   'x-gzip': () => zlib.createGunzip(),
   deflate: () => zlib.createInflate(),
   br: () => zlib.createBrotliDecompress(),
-  zstd: () => zlib.createZstdDecompress(),
+  ...(zlib.createZstdDecompress && { zstd: () => zlib.createZstdDecompress() }),
 };
 
 // fetch() replacement built on node:http(s). Node's global fetch rewrites
@@ -175,6 +196,9 @@ async function nodeFetch(url, init = {}) {
   }
 }
 
+// Resolves to { status, statusText, headers, body }, where body is the raw
+// (still compressed) node:http response stream, or null. Web streams cost a
+// lot per chunk, so bodies stay Node streams all the way to the client.
 function nodeRequest(u, init, agent) {
   return new Promise((resolve, reject) => {
     const headers = {};
@@ -197,21 +221,13 @@ function nodeRequest(u, init, agent) {
         try { out.append(res.rawHeaders[i], res.rawHeaders[i + 1]); } catch {}
       }
       const noBody = init.method === 'HEAD' || [204, 205, 304].includes(res.statusCode);
-      let body = res;
-      const enc = (out.get('content-encoding') || '').trim().toLowerCase();
-      if (!noBody && DECODERS[enc]) {
-        body = res.pipe(DECODERS[enc]());
-        res.on('error', (e) => body.destroy(e));
-        out.delete('content-encoding');
-        out.delete('content-length');
-      }
       if (noBody) res.resume();
       // Response only allows 200-599 (some sites use e.g. 999) and a plain reason phrase.
       const status = res.statusCode < 200 || res.statusCode > 599 ? 502 : res.statusCode;
       const statusText = (res.statusMessage || '').replace(/[^\t\x20-\x7e\x80-\xff]/g, '');
-      resolve(new Response(noBody ? null : Readable.toWeb(body), { status, statusText, headers: out }));
+      resolve({ status, statusText, headers: out, body: noBody ? null : res });
     });
-    if (init.body) Readable.fromWeb(init.body).on('error', (e) => req.destroy(e)).pipe(req);
+    if (init.body) init.body.on('error', (e) => req.destroy(e)).pipe(req);
     else req.end();
   });
 }
@@ -454,10 +470,9 @@ async function proxy(request, self, target) {
     resp = await nodeFetch(target.href, {
       method: request.method,
       headers,
-      body: ['GET', 'HEAD'].includes(request.method) ? undefined : request.body,
+      body: request.nodeBody,
       redirect: 'manual',
       signal: ctrl.signal,
-      duplex: 'half',
     });
   } catch (err) {
     const timedOut = ctrl.signal.aborted;
@@ -469,9 +484,30 @@ async function proxy(request, self, target) {
 
   const out = new Headers(resp.headers);
   for (const h of DROP_RESPONSE_HEADERS) out.delete(h);
-  // nodeFetch has already decompressed the body (and dropped the length if it did).
-  const length = Number(out.get('content-length') || 0);
+  // nodeFetch leaves the body compressed. Decoded, its length is unknown.
+  let enc = (out.get('content-encoding') || '').trim().toLowerCase();
+  if (enc === 'identity') enc = '';
+  const length = enc ? 0 : Number(out.get('content-length') || 0);
   out.delete('content-encoding');
+  const withBody = (body) => Object.assign(new Response(null, init), { nodeBody: body });
+  const decoded = () => (DECODERS[enc] ? pipeline(resp.body, DECODERS[enc](), () => {}) : resp.body);
+  const bytes = async () => {
+    const buf = await readAll(resp.body);
+    const fn = DECODERS[enc] && INFLATE[enc];
+    return fn ? new Promise((res, rej) => fn(buf, (e, r) => (e ? rej(e) : res(r)))) : buf;
+  };
+  // Bodies that aren't rewritten keep their encoding if the client accepts it.
+  const passthrough = () => {
+    if (enc && DECODERS[enc]) {
+      if (acceptsEncoding(request.headers.get('accept-encoding'), enc === 'x-gzip' ? 'gzip' : enc)) {
+        out.set('content-encoding', enc);
+        out.append('vary', 'accept-encoding');
+        return withBody(resp.body);
+      }
+      out.delete('content-length');
+    }
+    return withBody(decoded());
+  };
 
   const location = out.get('location');
   if (location) out.set('location', proxUrl(location, target));
@@ -485,57 +521,330 @@ async function proxy(request, self, target) {
 
   const init = { status: resp.status, statusText: resp.statusText, headers: out };
   if (request.method === 'HEAD' || [204, 205, 304].includes(resp.status) || !resp.body) {
+    if (resp.body) resp.body.resume();
+    // The upstream length is of the encoded or not yet rewritten body.
+    if (enc || /html|css|javascript|ecmascript/.test(out.get('content-type') || '')) out.delete('content-length');
     return new Response(null, init);
   }
 
   const type = (out.get('content-type') || '').toLowerCase();
-  if (length > MAX_BUFFERED_BYTES) return new Response(resp.body, init);
 
   // What the body is used for decides how it is rewritten: a JSONP script
   // served as text/html is still a script.
   // The service worker's re-fetches arrive as "empty"; it passes the real destination along.
   const dest = request.headers.get('x-px-dest') || request.headers.get('sec-fetch-dest') || '';
   const asScript = /^(?:script|worker|sharedworker)$/.test(dest) && !/^(?:image|video|audio|font)\/|css|wasm|json/.test(type);
-  const rewritten = (body, mime) => {
-    out.delete('content-length');
-    // Rewritten text is always sent as UTF-8.
-    out.set('content-type', `${mime || type.split(';')[0].trim() || 'text/plain'}; charset=utf-8`);
-    return new Response(body, init);
-  };
+  // Rewritten text is always sent as UTF-8.
+  const setType = (mime) => out.set('content-type', `${mime || type.split(';')[0].trim() || 'text/plain'}; charset=utf-8`);
 
   if (!asScript && /text\/html|application\/xhtml\+xml/.test(type)) {
-    const html = decodeText(new Uint8Array(await resp.arrayBuffer()), type, /<meta[^>]+charset=["']?([\w-]+)/i);
+    out.delete('content-length');
     out.set('referrer-policy', 'same-origin');
     out.set('cache-control', 'no-store');
     // XHTML is served as HTML: the injected runtime isn't well-formed XML.
-    return rewritten(rewriteHtml(html, target), 'text/html');
+    setType('text/html');
+    const body = pipeline(decoded(), htmlStream(type, target), () => {}).on('error', () => {});
+    // Headers go out with the first rewritten chunk, so a failure before it
+    // (the runtime is injected only once <head> or <html> arrives) still gets an error page.
+    let first;
+    try {
+      first = await firstChunk(body);
+    } catch (err) {
+      return errorPage(502, 'Could not reach site', `${target.href}\n${errText(err)}`);
+    }
+    if (first === null) return withBody(Buffer.alloc(0));
+    body.unshift(first);
+    return withBody(body);
   }
-  if (type.includes('text/css') && !asScript) {
-    const css = decodeText(new Uint8Array(await resp.arrayBuffer()), type, /^@charset\s+["']([\w-]+)/i);
-    return rewritten(rewriteCss(css.replace(/^@charset\s+["'][\w-]+["']\s*;?/i, ''), target));
+  const css = !asScript && type.includes('text/css');
+  const js = !css && (asScript || /javascript|ecmascript/.test(type));
+  if ((!css && !js) || length > MAX_BUFFERED_BYTES) return passthrough();
+
+  if (js) out.set('x-px-js', '1');
+  const job = { kind: css ? 'css' : 'js', base: target.href, type, worker: js && /worker$/.test(dest) };
+  const asset = await rewriteAsset(job, await bytes());
+  setType(js && asScript && !/javascript|ecmascript/.test(type) ? 'text/javascript' : null);
+  return withBody(await assetBody(asset, request.headers.get('accept-encoding'), out));
+}
+
+const INFLATE = { gzip: zlib.gunzip, 'x-gzip': zlib.gunzip, deflate: zlib.inflate, br: zlib.brotliDecompress, zstd: zlib.zstdDecompress };
+
+// The first chunk a stream produces (null if it ends empty), leaving it paused.
+function firstChunk(stream) {
+  return new Promise((resolve, reject) => {
+    const done = (fn, v) => {
+      stream.off('data', onData).off('end', onEnd).off('error', onError);
+      fn(v);
+    };
+    const onData = (chunk) => { stream.pause(); done(resolve, chunk); };
+    const onEnd = () => done(resolve, null);
+    const onError = (err) => done(reject, err);
+    stream.on('data', onData).on('end', onEnd).on('error', onError);
+  });
+}
+
+async function readAll(stream) {
+  const chunks = [];
+  for await (const c of stream) chunks.push(c);
+  return Buffer.concat(chunks);
+}
+
+// ---------------------------------------------------------------- CSS / JS rewriting
+
+// Rewriting a large bundle takes tens of milliseconds of CPU, and sites load
+// the same bundles on every page, so results are kept by content and base URL,
+// along with their compressed forms. Large files are rewritten on worker
+// threads so one bundle doesn't hold up every other request.
+const REWRITE_CACHE_BYTES = 64 * 1024 * 1024;
+const WORKER_MIN_BYTES = 32 * 1024;
+const assetCache = new Map(); // key -> { key, buf, size, br?, gzip? } (least recently used first)
+const assetJobs = new Map(); // key -> Promise<entry>, rewrites in progress
+let assetCacheSize = 0;
+
+// job: { kind: 'css' | 'js', base, type (Content-Type), worker (prepend the worker runtime) }
+function rewriteAssetSync({ kind, base, type, worker }, bytes) {
+  let text;
+  if (kind === 'css') {
+    const css = decodeText(bytes, type, /^@charset\s+["']([\w-]+)/i);
+    text = rewriteCss(css.replace(/^@charset\s+["'][\w-]+["']\s*;?/i, ''), new URL(base));
+  } else {
+    text = rewriteJs(decodeText(bytes, type), base, vmCheck);
+    if (worker) text = withWorkerRuntime(text);
   }
-  if (asScript || /javascript|ecmascript/.test(type)) {
-    out.set('x-px-js', '1');
-    const js = rewriteJs(decodeText(new Uint8Array(await resp.arrayBuffer()), type), target.href, vmCheck);
-    return rewritten(/worker$/.test(dest) ? withWorkerRuntime(js) : js, asScript && !/javascript|ecmascript/.test(type) ? 'text/javascript' : null);
+  return new TextEncoder().encode(text);
+}
+
+function rewriteAsset(job, bytes) {
+  const toBuf = (u8) => Buffer.from(u8.buffer, u8.byteOffset, u8.length);
+  if (bytes.length < 2048) return { buf: toBuf(rewriteAssetSync(job, bytes)) };
+  const key = crypto.createHash('sha1')
+    .update(`${job.kind}\0${job.base}\0${job.type}\0${job.worker ? 1 : 0}\0`).update(bytes).digest('base64');
+  const hit = assetCache.get(key);
+  if (hit) {
+    assetCache.delete(key);
+    assetCache.set(key, hit);
+    return hit;
   }
-  return new Response(resp.body, init);
+  let p = assetJobs.get(key);
+  if (!p) {
+    const run = bytes.length < WORKER_MIN_BYTES ? Promise.resolve().then(() => rewriteAssetSync(job, bytes)) : runInWorker(job, bytes);
+    p = run.then((u8) => {
+      const entry = { key, buf: toBuf(u8), size: 0 };
+      if (u8.length <= REWRITE_CACHE_BYTES / 4) {
+        assetCache.set(key, entry);
+        growAssetCache(entry, u8.length);
+      }
+      return entry;
+    }).finally(() => assetJobs.delete(key));
+    assetJobs.set(key, p);
+  }
+  return p;
+}
+
+function growAssetCache(entry, n) {
+  if (assetCache.get(entry.key) !== entry) return;
+  entry.size += n;
+  assetCacheSize += n;
+  for (const [k, v] of assetCache) {
+    if (assetCacheSize <= REWRITE_CACHE_BYTES) break;
+    assetCache.delete(k);
+    assetCacheSize -= v.size;
+  }
+}
+
+// The rewritten body in the best encoding the client accepts. Compressed forms
+// are made once (off the main thread) and kept with the entry.
+async function assetBody(entry, accept, headers) {
+  if (entry.buf.length < 1024) {
+    headers.set('content-length', String(entry.buf.length));
+    return entry.buf;
+  }
+  headers.append('vary', 'accept-encoding');
+  const enc = acceptsEncoding(accept, 'br') ? 'br' : acceptsEncoding(accept, 'gzip') ? 'gzip' : null;
+  let body = entry.buf;
+  if (enc) {
+    entry[enc] ||= new Promise((res, rej) => {
+      const cb = (e, r) => (e ? rej(e) : res(r));
+      if (enc === 'gzip') zlib.gzip(entry.buf, { level: 6 }, cb);
+      else {
+        zlib.brotliCompress(entry.buf, {
+          params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: entry.buf.length },
+        }, cb);
+      }
+    }).then((z) => { growAssetCache(entry, z.length); return z; }, () => { entry[enc] = null; return null; });
+    const z = await entry[enc];
+    if (z) {
+      body = z;
+      headers.set('content-encoding', enc);
+    }
+  }
+  headers.set('content-length', String(body.length));
+  return body;
+}
+
+// Worker threads run this same file; see the bottom of it. Piped in
+// (`curl … | node`) there is no file for them to load, so rewriting runs inline.
+const WORKER_URL = (() => {
+  try {
+    const u = new URL(import.meta.url);
+    return u.protocol === 'file:' && fs.existsSync(u) ? u : null;
+  } catch {
+    return null;
+  }
+})();
+const POOL_SIZE = Math.max(1, Math.min(8, (os.availableParallelism ? os.availableParallelism() : os.cpus().length) - 1));
+const pool = []; // { w, task }
+const jobQueue = [];
+let workerFailures = 0;
+
+function runInWorker(job, bytes) {
+  if (!WORKER_URL || workerFailures >= 3) return Promise.resolve().then(() => rewriteAssetSync(job, bytes));
+  return new Promise((resolve, reject) => {
+    jobQueue.push({ job, bytes, resolve, reject });
+    pump();
+  });
+}
+
+function pump() {
+  while (jobQueue.length) {
+    let slot = pool.find((s) => !s.task);
+    if (!slot) {
+      if (pool.length >= POOL_SIZE) return;
+      slot = spawnWorker();
+    }
+    const task = jobQueue.shift();
+    slot.task = task;
+    slot.w.ref();
+    slot.w.postMessage({ job: task.job, bytes: task.bytes });
+  }
+}
+
+function spawnWorker() {
+  const w = new Worker(WORKER_URL, { workerData: { peekaboomRewriter: true } });
+  const slot = { w, task: null };
+  w.unref();
+  w.on('message', (m) => {
+    const t = slot.task;
+    slot.task = null;
+    w.unref();
+    if (t) {
+      if (m.error) t.reject(new Error(m.error));
+      else t.resolve(m.out);
+    }
+    pump();
+  });
+  let dead = false;
+  const fail = () => {
+    if (dead) return;
+    dead = true;
+    workerFailures++;
+    pool.splice(pool.indexOf(slot), 1);
+    // Whatever killed the worker, the job still gets done.
+    const t = slot.task;
+    slot.task = null;
+    if (t) {
+      try { t.resolve(rewriteAssetSync(t.job, t.bytes)); } catch (e) { t.reject(e); }
+    }
+    pump();
+  };
+  w.on('error', fail);
+  w.on('exit', fail);
+  pool.push(slot);
+  return slot;
+}
+
+// ---------------------------------------------------------------- HTML streaming
+
+const HTML_CHARSET = /<meta[^>]+charset=["']?([\w-]+)/i;
+
+// Rewrites an HTML response body as it arrives. The charset is settled from
+// the first 4 KB like decodeText() does; a page with no declared charset is
+// read whole, since telling UTF-8 from windows-1252 needs every byte.
+function htmlStream(contentType, upstream) {
+  const rewrite = htmlRewriter(upstream);
+  let head = [];
+  let headLength = 0;
+  let decoder = null;
+  let whole = null; // chunks, when the page must be read whole
+  const start = (bytes) => {
+    try {
+      const charset = sniffCharset(bytes, contentType, HTML_CHARSET);
+      if (charset) decoder = new TextDecoder(charset);
+    } catch {}
+    head = null;
+    if (!decoder) { whole = [bytes]; return ''; }
+    return rewrite(decoder.decode(bytes, { stream: true }), false);
+  };
+  return new Transform({
+    transform(chunk, _, cb) {
+      let s = '';
+      try {
+        if (whole) whole.push(chunk);
+        else if (decoder) s = rewrite(decoder.decode(chunk, { stream: true }), false);
+        else {
+          head.push(chunk);
+          headLength += chunk.length;
+          if (headLength >= 4096) s = start(Buffer.concat(head));
+        }
+      } catch (e) { return cb(e); }
+      cb(null, s ? Buffer.from(s) : undefined);
+    },
+    flush(cb) {
+      let s = '';
+      try {
+        if (head) s = start(Buffer.concat(head));
+        s += whole
+          ? rewrite(decodeText(Buffer.concat(whole), contentType, HTML_CHARSET), true)
+          : rewrite(decoder.decode(), true);
+      } catch (e) { return cb(e); }
+      cb(null, s ? Buffer.from(s) : undefined);
+    },
+  });
+}
+
+// Inline scripts repeat across a site's pages too; same idea, kept as strings.
+const INLINE_CACHE_BYTES = 32 * 1024 * 1024;
+const rewriteCache = new Map(); // key -> string
+let rewriteCacheSize = 0;
+
+function cached(kind, base, input, fn) {
+  if (input.length < 2048) return fn(input);
+  const key = crypto.createHash('sha1').update(`${kind}\0${base}\0`).update(input).digest('base64');
+  const hit = rewriteCache.get(key);
+  if (hit != null) {
+    rewriteCache.delete(key);
+    rewriteCache.set(key, hit);
+    return hit;
+  }
+  const result = fn(input);
+  if (result.length * 2 > INLINE_CACHE_BYTES / 4) return result;
+  rewriteCache.set(key, result);
+  rewriteCacheSize += result.length * 2;
+  for (const [k, v] of rewriteCache) {
+    if (rewriteCacheSize <= INLINE_CACHE_BYTES) break;
+    rewriteCache.delete(k);
+    rewriteCacheSize -= v.length * 2;
+  }
+  return result;
+}
+
+const cachedRewriteJs = (code, base) => cached('js', base, code, (s) => rewriteJs(s, base, vmCheck));
+
+function acceptsEncoding(header, enc) {
+  for (const part of (header || '').toLowerCase().split(',')) {
+    const [name, ...params] = part.trim().split(';');
+    if (name.trim() !== enc && name.trim() !== '*') continue;
+    const q = params.map((p) => /^\s*q\s*=\s*([\d.]+)/.exec(p)).find(Boolean);
+    return !q || Number(q[1]) > 0;
+  }
+  return false;
 }
 
 // Decodes text using the charset from a BOM, the Content-Type header or the
 // document itself (`sniff`), falling back to UTF-8, then windows-1252 if the
 // bytes aren't valid UTF-8 (what browsers usually do for unlabelled pages).
 function decodeText(bytes, contentType, sniff) {
-  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return new TextDecoder('utf-8').decode(bytes);
-  if (bytes[0] === 0xff && bytes[1] === 0xfe) return new TextDecoder('utf-16le').decode(bytes);
-  if (bytes[0] === 0xfe && bytes[1] === 0xff) return new TextDecoder('utf-16be').decode(bytes);
-  let charset = (/charset=["']?([\w-]+)/i.exec(contentType) || [])[1];
-  if (!charset && sniff) {
-    const head = new TextDecoder('latin1').decode(bytes.subarray(0, 4096));
-    charset = (sniff.exec(head) || [])[1];
-    // A document can't really declare itself UTF-16 in ASCII; browsers read that as UTF-8.
-    if (/^utf-16/i.test(charset || '')) charset = 'utf-8';
-  }
+  const charset = sniffCharset(bytes, contentType, sniff);
   if (charset) {
     try { return new TextDecoder(charset).decode(bytes); } catch {}
   }
@@ -544,6 +853,21 @@ function decodeText(bytes, contentType, sniff) {
   } catch {
     return new TextDecoder('windows-1252').decode(bytes);
   }
+}
+
+// The declared charset (only the first 4 KB are looked at), or undefined.
+function sniffCharset(bytes, contentType, sniff) {
+  if (bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf) return 'utf-8';
+  if (bytes[0] === 0xff && bytes[1] === 0xfe) return 'utf-16le';
+  if (bytes[0] === 0xfe && bytes[1] === 0xff) return 'utf-16be';
+  let charset = (/charset=["']?([\w-]+)/i.exec(contentType) || [])[1];
+  if (!charset && sniff) {
+    const head = new TextDecoder('latin1').decode(bytes.subarray(0, 4096));
+    charset = (sniff.exec(head) || [])[1];
+    // A document can't really declare itself UTF-16 in ASCII; browsers read that as UTF-8.
+    if (/^utf-16/i.test(charset || '')) charset = 'utf-8';
+  }
+  return charset;
 }
 
 // Cookies land on the proxy's origin, which every proxied site shares. Each
@@ -607,11 +931,17 @@ const URL_ATTRS = ['src', 'action', 'formaction', 'poster', 'background'];
 // `base` differs from `upstream` for <iframe srcdoc>, whose document is
 // about:srcdoc and resolves URLs against its parent's base.
 function rewriteHtml(html, upstream, base = upstream) {
+  return htmlRewriter(upstream, base)(html, true);
+}
+
+// Returns write(text, final) -> rewritten HTML, for a document arriving in pieces.
+function htmlRewriter(upstream, base = upstream) {
   const script = runtimeScript(upstream, PREFIX, false);
   const ctx = { base };
   let injected = false;
+  let held = ''; // output from before the runtime's place is known
 
-  const out = transformHtml(html, {
+  const write = htmlTransformer({
     tag(t) {
       const name = t.name;
       if (!injected && (name === 'html' || name === 'head' || name === 'body')) {
@@ -679,14 +1009,24 @@ function rewriteHtml(html, upstream, base = upstream) {
       if (t.name === 'script' && (t.get('type') || '').trim().toLowerCase() === 'importmap') {
         return rewriteImportMap(text, ctx.base);
       }
-      if (t.name === 'script' && isJsType(t.get('type'))) return rewriteJs(text, ctx.base.href, vmCheck);
+      if (t.name === 'script' && isJsType(t.get('type'))) return cachedRewriteJs(text, ctx.base.href);
       return text;
     },
   });
 
-  if (injected) return out;
-  // No <html>/<head>/<body> tag: put the runtime first, after any doctype.
-  return out.replace(/^(\s*<!doctype[^>]*>)?/i, (m) => m + script);
+  return (text, final) => {
+    const out = write(text, final);
+    if (injected) {
+      if (!held) return out;
+      const all = held + out;
+      held = '';
+      return all;
+    }
+    held += out;
+    if (!final) return '';
+    // No <html>/<head>/<body> tag: put the runtime first, after any doctype.
+    return held.replace(/^(\s*<!doctype[^>]*>)?/i, (m) => m + script);
+  };
 }
 
 // javascript: URLs keep their code, rewritten like any other script.
@@ -757,51 +1097,73 @@ function usagePage(self) {
 const RAW_TEXT = new Set(['script', 'style', 'textarea', 'title', 'xmp', 'iframe', 'noembed', 'noframes', 'noscript']);
 const SPACE = new Set([' ', '\t', '\n', '\r', '\f']);
 
-function transformHtml(html, { tag: onTag, rawText: onRawText }) {
-  const out = [];
-  const n = html.length;
-  let i = 0;
-  while (i < n) {
-    const lt = html.indexOf('<', i);
-    if (lt === -1) { out.push(html.slice(i)); break; }
-    out.push(html.slice(i, lt));
-    const c = html[lt + 1] || '';
+// Returns write(chunk, final): the input may arrive in pieces, and whatever
+// can't be handled yet (a tag cut in half, a <script> without its end tag)
+// waits for the next one. The output is the same however the input is split.
+function htmlTransformer({ tag: onTag, rawText: onRawText }) {
+  let rest = '';
+  let raw = null; // { t, close, scan }: a raw-text element still waiting for its end tag
 
-    // Comments, doctype, processing instructions and end tags pass through.
-    if (html.startsWith('<!--', lt)) {
-      i = skipTo(html, '-->', lt + 4);
-      out.push(html.slice(lt, i));
-      continue;
+  return function write(chunk, final) {
+    const html = rest + chunk;
+    const n = html.length;
+    const out = [];
+    let i = 0;
+    for (;;) {
+      if (raw) {
+        raw.close.lastIndex = raw.scan;
+        const m = raw.close.exec(html);
+        if (!m && !final) {
+          // An end tag can't start before here without having been found already.
+          raw.scan = Math.max(0, n - i - raw.t.name.length - 2);
+          break;
+        }
+        const end = m ? m.index : n;
+        const text = html.slice(i, end);
+        out.push(onRawText ? onRawText(raw.t, text) ?? text : text);
+        raw = null;
+        i = end;
+      }
+      if (i >= n) break;
+      const lt = html.indexOf('<', i);
+      if (lt === -1) { out.push(html.slice(i)); i = n; break; }
+      out.push(html.slice(i, lt));
+      i = lt;
+      if (lt + 1 >= n && !final) break;
+      const c = html[lt + 1] || '';
+
+      // Comments, doctype, processing instructions and end tags pass through.
+      if (html.startsWith('<!--', lt)) {
+        const e = html.indexOf('-->', lt + 4);
+        if (e === -1 && !final) break;
+        i = e === -1 ? n : e + 3;
+        out.push(html.slice(lt, i));
+        continue;
+      }
+      if (c === '!' || c === '?' || c === '/') {
+        const e = html.indexOf('>', lt + 1);
+        if (e === -1 && !final) break;
+        i = e === -1 ? n : e + 1;
+        out.push(html.slice(lt, i));
+        continue;
+      }
+      if (!/[a-zA-Z]/.test(c)) { out.push('<'); i = lt + 1; continue; }
+
+      const t = parseTag(html, lt);
+      if (!t) { // unterminated tag
+        if (!final) break;
+        out.push(html.slice(lt));
+        i = n;
+        break;
+      }
+      i = t.end;
+      onTag(t);
+      out.push(t.toString(), t.appended);
+      if (RAW_TEXT.has(t.name)) raw = { t, close: new RegExp(`</${t.name}[\\s/>]`, 'ig'), scan: i };
     }
-    if (c === '!' || c === '?' || c === '/') {
-      i = skipTo(html, '>', lt + 1);
-      out.push(html.slice(lt, i));
-      continue;
-    }
-    if (!/[a-zA-Z]/.test(c)) { out.push('<'); i = lt + 1; continue; }
-
-    const t = parseTag(html, lt);
-    if (!t) { out.push(html.slice(lt)); break; } // unterminated tag at EOF
-    i = t.end;
-    onTag(t);
-    out.push(t.toString(), t.appended);
-
-    if (RAW_TEXT.has(t.name)) {
-      const close = new RegExp(`</${t.name}[\\s/>]`, 'ig');
-      close.lastIndex = i;
-      const m = close.exec(html);
-      const end = m ? m.index : n;
-      const text = html.slice(i, end);
-      out.push(onRawText ? onRawText(t, text) ?? text : text);
-      i = end;
-    }
-  }
-  return out.join('');
-}
-
-function skipTo(s, needle, from) {
-  const e = s.indexOf(needle, from);
-  return e === -1 ? s.length : e + needle.length;
+    rest = i < n ? html.slice(i) : '';
+    return out.join('');
+  };
 }
 
 function parseTag(s, start) {
@@ -898,7 +1260,7 @@ class Tag {
   }
 }
 
-const NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+const NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0' };
 
 function decodeEntities(s) {
   if (!s.includes('&')) return s;
@@ -938,8 +1300,11 @@ function rewriteJs(code, base, check) {
   if (!/\b(?:location|eval|import|export|top|parent)\b/.test(src)) return code;
 
   try {
-    const out = head + MARK + rewrite(src);
-    if (check && !check(out) && check(code)) return code;
+    const r = rewrite(src);
+    const out = head + MARK + r.code;
+    // Unchanged code needs no check, and a module never compiles as a script
+    // (so the check would keep `out` anyway).
+    if (check && r.edited && !r.module && !check(out) && check(code)) return code;
     return out;
   } catch (e) {
     return code;
@@ -948,10 +1313,14 @@ function rewriteJs(code, base, check) {
   function rewrite(src) {
     const toks = tokenize(src);
     const edits = [];
-    const declared = (name) => new RegExp(
-      `\\b(?:var|let|const|function|class)\\s+${name}\\b|(?:[(,]|(?<!\\$)\\{)\\s*${name}\\s*(?:[,)}]|=(?!=))|\\b${name}\\s*=>|\\.\\.\\.\\s*${name}\\b`,
-    ).test(src);
-    const skip = { location: declared('location'), top: declared('top'), parent: declared('parent') };
+    let isModule = false;
+    // Names the script declares itself (as a variable, parameter, ...) are left alone.
+    const skip = { location: false, top: false, parent: false };
+    const DECL = /\b(?:var|let|const|function|class)\s+(location|top|parent)\b|(?<=[(,]|(?<!\$)\{)\s*(location|top|parent)\s*(?=[,)}]|=(?!=))|\b(location|top|parent)\s*=>|\.\.\.\s*(location|top|parent)\b/g;
+    for (let m, found = 0; found < 3 && (m = DECL.exec(src));) {
+      const name = m[1] || m[2] || m[3] || m[4];
+      if (!skip[name]) { skip[name] = true; found++; }
+    }
     const fake = (n) => (n === 'location' ? '(globalThis.__px$L||location)' : `(globalThis.__px$${n}||${n})`);
     const P = (t, v) => t && t.t === 'p' && t.v === v;
     const isDot = (t) => t && t.t === 'p' && (t.v === '.' || t.v === '?.');
@@ -992,6 +1361,8 @@ function rewriteJs(code, base, check) {
         continue;
       }
       if (t.t !== 'i' || isDot(p)) continue;
+      // Top-level import / export declarations (and import.meta) only exist in modules.
+      if (!stack.length && (t.v === 'export' || (t.v === 'import' && !P(nx, '(')))) isModule = true;
 
       if (t.v === 'class' && !objectKey(p, nx)) { pendingClass = true; continue; }
 
@@ -1051,13 +1422,14 @@ function rewriteJs(code, base, check) {
       }
     }
 
+    const list = edits.filter(Boolean).sort((a, b) => a[0] - b[0]);
     let out = '';
     let pos = 0;
-    for (const e of edits.filter(Boolean).sort((a, b) => a[0] - b[0])) {
+    for (const e of list) {
       out += src.slice(pos, e[0]) + e[2];
       pos = e[1];
     }
-    return out + src.slice(pos);
+    return { code: out + src.slice(pos), edited: list.length > 0, module: isModule };
   }
 
   // Significant tokens: i(dent), p(unct), s(tring), n(umber), r(egex), q (template chunk).
@@ -1147,6 +1519,13 @@ function rewriteJs(code, base, check) {
       if (ch === '`') { i = tpl(i + 1, false); continue; }
       if (ch === '}' && braces[braces.length - 1] === 't') { braces.pop(); i = tpl(i + 1, true); continue; }
 
+      // Plain ASCII names (nearly all of them) without the regex.
+      if ((c >= 97 && c <= 122) || (c >= 65 && c <= 90) || c === 95 || c === 36) {
+        let j = i + 1;
+        let d = src.charCodeAt(j);
+        while ((d >= 97 && d <= 122) || (d >= 65 && d <= 90) || (d >= 48 && d <= 57) || d === 95 || d === 36) d = src.charCodeAt(++j);
+        if (!(d > 127 || d === 92)) { push({ t: 'i', s: i, e: j, v: src.slice(i, j) }); i = j; continue; }
+      }
       IDENT.lastIndex = i;
       let m = IDENT.exec(src);
       if (m) { push({ t: 'i', s: i, e: i + m[0].length, v: m[0] }); i += m[0].length; continue; }
@@ -2398,13 +2777,16 @@ function runtime(C, rewriteJs, mapSrcset, rewriteCss, workerRuntime) {
   perDoc();
 }
 
+// __name: guard against bundlers that wrap functions with a name helper.
+const RUNTIME_HEAD = `<script data-px-rt>(function(__name){(${runtime})(`;
+const RUNTIME_TAIL = `,${rewriteJs},${mapSrcset},${rewriteCss},${workerRuntime});})(function(f){return f;});</script>`;
+
 function runtimeScript(upstream, prefix, swReload) {
   const json = JSON.stringify({
     upstream: upstream.href, prefix, swReload, cookieSite: cookieSite(upstream.hostname),
     uiPort: UI_PORT, uiOrigin: UI_ORIGIN,
   }).replace(/</g, '\\u003c');
-  // __name: guard against bundlers that wrap functions with a name helper.
-  return `<script data-px-rt>(function(__name){(${runtime})(${json},${rewriteJs},${mapSrcset},${rewriteCss},${workerRuntime});})(function(f){return f;});</script>`;
+  return RUNTIME_HEAD + json + RUNTIME_TAIL;
 }
 
 // ---------------------------------------------------------------- HTTP server
@@ -2417,31 +2799,70 @@ function toRequest(req, withBody) {
     if (Array.isArray(v)) v.forEach((x) => headers.append(k, x));
     else if (v != null) headers.set(k, v);
   }
-  return new Request(`${proto}://${host}${req.url}`, {
-    method: req.method,
-    headers,
-    body: withBody ? Readable.toWeb(req) : undefined,
-    duplex: 'half',
-  });
+  const request = new Request(`${proto}://${host}${req.url}`, { method: req.method, headers });
+  // The body stays a Node stream and is piped straight upstream.
+  if (withBody) request.nodeBody = req;
+  return request;
 }
 
-async function send(res, resp) {
+// Text the proxy decoded or rewrote is compressed again for the browser.
+// Flushing after every chunk keeps streamed responses streaming.
+const COMPRESSIBLE = /^(?:text\/(?!event-stream)|application\/(?:(?:x-)?javascript|ecmascript|json|xml|xhtml\+xml|wasm|[\w.-]+\+(?:json|xml))|image\/svg\+xml)/;
+
+function compressor(req, resp, body) {
+  if (!body || resp.headers.has('content-encoding') || resp.headers.has('content-range') || resp.status === 206) return null;
+  if (!COMPRESSIBLE.test(resp.headers.get('content-type') || '')) return null;
+  const length = body instanceof Uint8Array ? body.length : resp.headers.get('content-length');
+  if (length != null && Number(length) < 1024) return null;
+  const accept = req.headers['accept-encoding'];
+  if (acceptsEncoding(accept, 'br')) {
+    return ['br', zlib.createBrotliCompress({
+      flush: zlib.constants.BROTLI_OPERATION_FLUSH,
+      params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 4 },
+    })];
+  }
+  if (acceptsEncoding(accept, 'gzip')) return ['gzip', zlib.createGzip({ flush: zlib.constants.Z_SYNC_FLUSH, level: 6 })];
+  return null;
+}
+
+// Proxied responses carry their body as `nodeBody` (a Node stream or a
+// Buffer); the proxy's own pages are small web Responses.
+async function send(req, res, resp) {
   const headers = {};
   for (const [k, v] of resp.headers) if (k !== 'set-cookie') headers[k] = v;
   const cookies = resp.headers.getSetCookie();
   if (cookies.length) headers['set-cookie'] = cookies;
+  let body = resp.nodeBody || (resp.body ? Buffer.from(await resp.arrayBuffer()) : null);
+  const z = compressor(req, resp, body);
+  if (z) {
+    headers['content-encoding'] = z[0];
+    headers.vary = headers.vary ? `${headers.vary}, accept-encoding` : 'accept-encoding';
+    delete headers['content-length'];
+  } else if (body instanceof Uint8Array) {
+    headers['content-length'] = body.length;
+  }
   res.writeHead(resp.status, resp.statusText || undefined, headers);
-  if (!resp.body) return res.end();
-  const body = Readable.fromWeb(resp.body);
-  body.on('error', () => res.destroy());
-  res.on('close', () => body.destroy());
+  if (!body) return res.end();
+  if (body instanceof Uint8Array) {
+    if (!z) return res.end(body);
+    z[1].end(body);
+  } else {
+    body.on('error', () => res.destroy());
+    res.on('close', () => body.destroy());
+    if (z) body.pipe(z[1]);
+  }
+  if (z) {
+    body = z[1];
+    body.on('error', () => res.destroy());
+    res.on('close', () => body.destroy());
+  }
   body.pipe(res);
 }
 
 const server = http.createServer({ maxHeaderSize: 256 * 1024 }, async (req, res) => {
   try {
     const request = toRequest(req, !['GET', 'HEAD'].includes(req.method));
-    await send(res, await handle(request));
+    await send(req, res, await handle(request));
   } catch (err) {
     if (!res.headersSent) res.writeHead(500, { 'content-type': 'text/plain' });
     res.end(String((err && err.message) || err));
@@ -2552,11 +2973,27 @@ const uiServer = http.createServer(async (req, res) => {
 
 // Imported (e.g. by index.test.js) it only provides the exports below. Run
 // directly, or piped in (`curl … | node`, where there is no script path), it serves.
-if (!process.argv[1] || import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isMainThread && (!process.argv[1] || import.meta.url === pathToFileURL(process.argv[1]).href)) {
   let listening = 0;
   const ready = () => { if (++listening === 2) console.log(banner()); };
-  server.listen(PORT, HOST, ready);
+  server.listen(PORT, HOST, () => {
+    ready();
+    // Start the rewriting workers now rather than on the first big script.
+    if (WORKER_URL) while (pool.length < POOL_SIZE) spawnWorker();
+  });
   uiServer.listen(UI_PORT, HOST, ready);
+}
+
+// A rewriting worker (see runInWorker): CSS / JS in, UTF-8 bytes out.
+if (!isMainThread && workerData && workerData.peekaboomRewriter) {
+  parentPort.on('message', ({ job, bytes }) => {
+    try {
+      const out = rewriteAssetSync(job, bytes);
+      parentPort.postMessage({ out }, [out.buffer]);
+    } catch (err) {
+      parentPort.postMessage({ error: String((err && err.stack) || err) });
+    }
+  });
 }
 
 // Startup message. Plain text when piped or when NO_COLOR is set.
