@@ -62,7 +62,21 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 
 When using a hosting provider, it's best to separate the frontend and the backend because you may not be able to specify which port gets forwarded.
 
-I'd recommend using GitHub Pages for the frontend (`index.html`) and hosting the backend (`proxy.js`) on a seperate service.
+I'd recommend using GitHub Pages or other free static hosting for the frontend (`index.html`) and hosting the backend (`proxy.js`) on a separate service.
+
+#### Backend configs:
+
+Build Command:
+```bash
+echo "no build"
+```
+
+Start Command:
+```bash
+node proxy.js
+```
+
+
 For your own frontend configuration, use:
 
 ```js
