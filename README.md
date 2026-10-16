@@ -81,6 +81,14 @@ It would be greatly appreciated if you hosted a backend and submitted a pull req
 
 <br>
 
+## Current proxy backends
+For use with the github pages frontend at: https://ltorl.github.io/knoiren-browser <br>
+<br>
+(Copy and put into settings page):
+1. https://knoiren-browser-backend.onrender.com
+
+<br>
+
 ## Features
 
 <table>
