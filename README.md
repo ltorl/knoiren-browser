@@ -100,6 +100,7 @@ For use with the github pages frontend at: https://ltorl.github.io/knoiren-brows
 <br>
 (Copy and put into settings page):
 1. https://knoiren-browser-backend.onrender.com
+2. https://forgery-sophisticated-fish.abasthan.app
 
 <br>
 
