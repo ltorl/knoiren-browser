@@ -13,6 +13,8 @@
 //
 // Everything is in this one file: the HTTP servers, the proxy, a small HTML
 // rewriter, the script injected into every page and the UI page.
+// This file doesn't rely on index.html. That is a static frontend version where 
+// you have to input a proxy URL in settings.
 import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
