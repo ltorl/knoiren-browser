@@ -55,6 +55,15 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 
 </details>
 
+<details>
+<summary><b>Hosting</b></summary>
+When using a hosting provider, it's best to separate the frontend and the backend because you may not be able to specify which port gets forwarded.
+I'd recommend using GitHub Pages for the frontend on index.html, and then for your backend, you can use proxy.js to run on the hosting service.
+It would be greatly appreciated if you host a backend and put in a pull request to this readme so others can use it. 
+Make sure to use UI_ORIGIN = https://your-site.com or if you wnat to host on to use with this repo's page's frontend it would be
+UI_ORIGIN = https://ltorl.github.io
+</details>
+
 <br>
 
 ## Features
