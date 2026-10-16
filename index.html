@@ -925,6 +925,31 @@
             --nt: clamp(32px, min(2.5vw, 4.6vh), 64px);
         }
 
+        .noproxy {
+            position: absolute;
+            inset: 0;
+            background: #232428;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 40px 20px 100px;
+            text-align: center;
+        }
+
+        .noproxy .np-title {
+            font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+            font-size: clamp(1.6rem, 3vw, 2.4rem);
+            font-weight: 700;
+        }
+
+        .noproxy .np-text {
+            color: rgba(255, 255, 255, 0.65);
+            font-size: 1rem;
+        }
+
         .newtab .nt-title {
             font-family: 'Outfit', 'Inter', system-ui, sans-serif;
             font-size: calc(var(--nt) * 1.06);
@@ -2058,12 +2083,14 @@
         function showNewtab(tab) {
             if (tab.newtabEl) tab.newtabEl.style.display = '';
             if (tab.settingsEl) tab.settingsEl.style.display = 'none';
+            if (tab.noproxyEl) tab.noproxyEl.style.display = 'none';
             if (tab.sframe) tab.sframe.frame.style.display = 'none';
         }
 
         function showFrame(tab) {
             if (tab.newtabEl) tab.newtabEl.style.display = 'none';
             if (tab.settingsEl) tab.settingsEl.style.display = 'none';
+            if (tab.noproxyEl) tab.noproxyEl.style.display = 'none';
             if (tab.sframe) tab.sframe.frame.style.display = '';
         }
 
@@ -2155,11 +2182,6 @@
                 : 'Bookmarklets and tab muting only work if the proxy was started with UI_ORIGIN=' + location.origin + '.');
         }
 
-        function focusProxyInput(tab) {
-            const input = tab.settingsEl && tab.settingsEl.querySelector('.set-proxy-input');
-            if (input) setTimeout(() => { input.focus(); input.select(); }, 0);
-        }
-
         function buildWindowSection(inner) {
             inner.appendChild(settingsSection('Sites that can open new windows'));
 
@@ -2241,6 +2263,7 @@
             tab.favicon = SETTINGS_ICON;
             if (tab.newtabEl) tab.newtabEl.style.display = 'none';
             if (tab.sframe) tab.sframe.frame.style.display = 'none';
+            if (tab.noproxyEl) tab.noproxyEl.style.display = 'none';
             tab.settingsEl.style.display = '';
 
             renderTabs();
@@ -2258,6 +2281,33 @@
             // Reuse an untouched new tab; otherwise open a fresh one.
             const tab = (cur && cur.type === 'newtab' && !cur.hist.length) ? cur : (createTab() || cur);
             showSettings(tab);
+        }
+
+        // Shown in place of a site when there is no proxy to load it through.
+        function showNoProxy(tab, url) {
+            if (!tab.noproxyEl) {
+                const page = document.createElement('div');
+                page.className = 'noproxy';
+                const title = document.createElement('div');
+                title.className = 'np-title';
+                title.textContent = 'No proxy set';
+                const text = document.createElement('div');
+                text.className = 'np-text';
+                text.textContent = 'You can add one in settings.';
+                page.append(title, text);
+                tab.panel.appendChild(page);
+                tab.noproxyEl = page;
+            }
+            tab.type = 'noproxy';
+            tab.url = url;
+            tab.title = 'No proxy set';
+            tab.favicon = NEWTAB_ICON;
+            if (tab.newtabEl) tab.newtabEl.style.display = 'none';
+            if (tab.settingsEl) tab.settingsEl.style.display = 'none';
+            if (tab.sframe) tab.sframe.frame.style.display = 'none';
+            tab.noproxyEl.style.display = '';
+            renderTabs();
+            if (tab.id === activeId) syncToolbar();
         }
 
         function ensureFrame(tab) {
@@ -2279,8 +2329,7 @@
             if (!url) return;
             if (!PROXY_ORIGIN) {
                 tab.pendingNav = url;
-                showSettings(tab);
-                focusProxyInput(tab);
+                showNoProxy(tab, url);
                 return;
             }
 
@@ -2375,6 +2424,7 @@
         function reloadTab(tab) {
             if (!tab) return;
             if (tab.type === 'settings') { renderSettings(tab); return; }
+            if (tab.type === 'noproxy') { navigateTab(tab, tab.url); return; }
             if (tab.histPtr >= 0 && tab.sframe) tab.sframe.go(tab.url);
         }
 
@@ -3188,13 +3238,7 @@
 
         renderBookmarks();
         initProxy();
-        {
-            const first = createTab();
-            if (!PROXY_ORIGIN && first) {
-                showSettings(first);
-                focusProxyInput(first);
-            }
-        }
+        createTab();
     </script>
 </body>
 
