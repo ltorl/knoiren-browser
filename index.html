@@ -3240,6 +3240,18 @@
         initProxy();
         createTab();
     </script>
+
+    <script>
+        function refreshFavicon() {
+            const existingIcons = document.querySelectorAll('link[rel=\'icon\']');
+            existingIcons.forEach(oldIcon => {
+                const newIcon = oldIcon.cloneNode(true);
+                oldIcon.remove();
+                document.head.appendChild(newIcon);
+            });
+        }
+        setTimeout(refreshFavicon, 51);
+    </script> 
 </body>
 
 </html>
