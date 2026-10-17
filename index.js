@@ -9,7 +9,9 @@
 // reach the UI's storage. If the proxy is reachable at a different address
 // than the UI's host name with PORT (e.g. behind a reverse proxy), set
 // PROXY_ORIGIN=https://proxy.example.com. Likewise UI_ORIGIN for the UI's
-// address as the browser sees it; only that origin may run bookmarklets in pages.
+// address as the browser sees it; only that origin may run bookmarklets and
+// mute tabs in pages. It takes a comma-separated list of origins, or * for any
+// origin (any page that embeds the proxy can then run code in proxied pages).
 //
 // Everything is in this one file: the HTTP servers, the proxy, a small HTML
 // rewriter, the script injected into every page and the UI page.
@@ -32,9 +34,21 @@ const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || '0.0.0.0';
 const UI_PORT = Number(process.env.UI_PORT) || 8080;
 const PROXY_ORIGIN = process.env.PROXY_ORIGIN ? process.env.PROXY_ORIGIN.replace(/\/+$/, '') : null;
-const UI_ORIGIN = process.env.UI_ORIGIN ? process.env.UI_ORIGIN.replace(/\/+$/, '') : null;
+// null: the UI server on the page's own host name (UI_PORT).
+const UI_ORIGINS = parseOrigins(process.env.UI_ORIGIN);
 const PREFIX = '/__px/';
 const ORIGIN_COOKIE = '__px_origin';
+
+// "https://a.example, https://b.example" or "*" -> ['https://a.example', ...] / ['*']
+function parseOrigins(value) {
+  if (!value || !value.trim()) return null;
+  const list = [];
+  for (const o of value.split(/[\s,]+/).filter(Boolean)) {
+    if (o === '*') { list.push(o); continue; }
+    try { list.push(new URL(o).origin); } catch { if (isMainThread) console.warn(`UI_ORIGIN: ignoring ${o} (not a URL)`); }
+  }
+  return list;
+}
 const UPSTREAM_TIMEOUT_MS = 100_000; // time to response headers; slow origins can take 30s+
 const MAX_BUFFERED_BYTES = 16 * 1024 * 1024; // CSS / JS rewriting buffers the body (HTML streams)
 
@@ -352,8 +366,10 @@ function originFromReferer(request, self) {
   return up && up.origin;
 }
 
+const ORIGIN_COOKIE_RE = new RegExp(`(?:^|;\\s*)${ORIGIN_COOKIE}=([^;]+)`);
+
 function originFromCookie(request) {
-  const m = (request.headers.get('cookie') || '').match(new RegExp(`(?:^|;\\s*)${ORIGIN_COOKIE}=([^;]+)`));
+  const m = (request.headers.get('cookie') || '').match(ORIGIN_COOKIE_RE);
   if (!m) return null;
   try {
     const u = new URL(decodeURIComponent(m[1]));
@@ -759,10 +775,13 @@ function spawnWorker() {
 const HTML_CHARSET = /<meta[^>]+charset=["']?([\w-]+)/i;
 
 // Rewrites an HTML response body as it arrives. The charset is settled from
-// the first 4 KB like decodeText() does; a page with no declared charset is
-// read whole, since telling UTF-8 from windows-1252 needs every byte.
+// the first 4 KB like decodeText() does (or the first 3 bytes, for a BOM, when
+// the Content-Type names one, so rewriting starts with the first chunk); a
+// page with no declared charset is read whole, since telling UTF-8 from
+// windows-1252 needs every byte.
 function htmlStream(contentType, upstream) {
   const rewrite = htmlRewriter(upstream);
+  const headNeeded = /charset=["']?[\w-]+/i.test(contentType || '') ? 3 : 4096;
   let head = [];
   let headLength = 0;
   let decoder = null;
@@ -785,7 +804,7 @@ function htmlStream(contentType, upstream) {
         else {
           head.push(chunk);
           headLength += chunk.length;
-          if (headLength >= 4096) s = start(Buffer.concat(head));
+          if (headLength >= headNeeded) s = start(Buffer.concat(head));
         }
       } catch (e) { return cb(e); }
       cb(null, s ? Buffer.from(s) : undefined);
@@ -810,6 +829,8 @@ let rewriteCacheSize = 0;
 
 function cached(kind, base, input, fn) {
   if (input.length < 2048) return fn(input);
+  // Only imports depend on the page's address; other scripts are shared by every page.
+  if (kind === 'js' && !/\b(?:import|from)\b/.test(input)) base = '';
   const key = crypto.createHash('sha1').update(`${kind}\0${base}\0`).update(input).digest('base64');
   const hit = rewriteCache.get(key);
   if (hit != null) {
@@ -964,7 +985,7 @@ function htmlRewriter(upstream, base = upstream) {
       if (style != null) t.set('style', rewriteCss(style, ctx.base));
       t.removeAttr('integrity');
       for (const a of t.attrs) {
-        if (/^on/i.test(a.name)) t.set(a.name, rewriteJs(a.value));
+        if (a.name.charCodeAt(0) === 111 && a.name.charCodeAt(1) === 110) t.set(a.name, rewriteJs(a.value)); // on*
       }
 
       const href = t.get('href');
@@ -1096,7 +1117,15 @@ function usagePage(self) {
 // Everything it doesn't touch is copied through byte for byte.
 
 const RAW_TEXT = new Set(['script', 'style', 'textarea', 'title', 'xmp', 'iframe', 'noembed', 'noframes', 'noscript']);
-const SPACE = new Set([' ', '\t', '\n', '\r', '\f']);
+const isSpace = (c) => c === 32 || c === 10 || c === 9 || c === 13 || c === 12;
+const isAlpha = (c) => (c >= 97 && c <= 122) || (c >= 65 && c <= 90);
+// One end-tag regex per raw-text element name, reused (lastIndex is set before each use).
+const CLOSE_TAG = new Map();
+const closeTag = (name) => {
+  let re = CLOSE_TAG.get(name);
+  if (!re) CLOSE_TAG.set(name, re = new RegExp(`</${name}[\\s/>]`, 'ig'));
+  return re;
+};
 
 // Returns write(chunk, final): the input may arrive in pieces, and whatever
 // can't be handled yet (a tag cut in half, a <script> without its end tag)
@@ -1148,7 +1177,7 @@ function htmlTransformer({ tag: onTag, rawText: onRawText }) {
         out.push(html.slice(lt, i));
         continue;
       }
-      if (!/[a-zA-Z]/.test(c)) { out.push('<'); i = lt + 1; continue; }
+      if (!isAlpha(html.charCodeAt(lt + 1))) { out.push('<'); i = lt + 1; continue; }
 
       const t = parseTag(html, lt);
       if (!t) { // unterminated tag
@@ -1160,7 +1189,7 @@ function htmlTransformer({ tag: onTag, rawText: onRawText }) {
       i = t.end;
       onTag(t);
       out.push(t.toString(), t.appended);
-      if (RAW_TEXT.has(t.name)) raw = { t, close: new RegExp(`</${t.name}[\\s/>]`, 'ig'), scan: i };
+      if (RAW_TEXT.has(t.name)) raw = { t, close: closeTag(t.name), scan: i };
     }
     rest = i < n ? html.slice(i) : '';
     return out.join('');
@@ -1170,25 +1199,26 @@ function htmlTransformer({ tag: onTag, rawText: onRawText }) {
 function parseTag(s, start) {
   const n = s.length;
   let i = start + 1;
-  while (i < n && !SPACE.has(s[i]) && s[i] !== '/' && s[i] !== '>') i++;
+  let c;
+  while (i < n && !isSpace(c = s.charCodeAt(i)) && c !== 47 && c !== 62) i++; // '/' '>'
   const rawName = s.slice(start + 1, i);
   const attrs = [];
   while (i < n) {
-    while (i < n && (SPACE.has(s[i]) || s[i] === '/')) i++;
+    while (i < n && (isSpace(c = s.charCodeAt(i)) || c === 47)) i++;
     if (i >= n) return null;
-    if (s[i] === '>') {
-      return new Tag(rawName, attrs, s[i - 1] === '/', s.slice(start, i + 1), i + 1);
+    if (c === 62) {
+      return new Tag(rawName, attrs, s.charCodeAt(i - 1) === 47, s.slice(start, i + 1), i + 1);
     }
     const nameStart = i;
     i++; // the first character always belongs to the name (even "=")
-    while (i < n && !SPACE.has(s[i]) && !'/>='.includes(s[i])) i++;
+    while (i < n && !isSpace(c = s.charCodeAt(i)) && c !== 47 && c !== 62 && c !== 61) i++; // '/' '>' '='
     const name = s.slice(nameStart, i);
     let value = null;
     let p = i;
-    while (p < n && SPACE.has(s[p])) p++;
-    if (s[p] === '=') {
+    while (p < n && isSpace(s.charCodeAt(p))) p++;
+    if (s.charCodeAt(p) === 61) {
       p++;
-      while (p < n && SPACE.has(s[p])) p++;
+      while (p < n && isSpace(s.charCodeAt(p))) p++;
       const q = s[p];
       if (q === '"' || q === "'") {
         const e = s.indexOf(q, p + 1);
@@ -1197,7 +1227,7 @@ function parseTag(s, start) {
         i = e + 1;
       } else {
         let e = p;
-        while (e < n && !SPACE.has(s[e]) && s[e] !== '>') e++;
+        while (e < n && !isSpace(c = s.charCodeAt(e)) && c !== 62) e++;
         value = s.slice(p, e);
         i = e;
       }
@@ -1225,13 +1255,19 @@ class Tag {
     this.appended = '';
   }
 
+  attr(name) {
+    const attrs = this.attrs;
+    for (let i = 0; i < attrs.length; i++) if (attrs[i].name === name) return attrs[i];
+    return undefined;
+  }
+
   get(name) {
-    const a = this.attrs.find((x) => x.name === name);
+    const a = this.attr(name);
     return a ? a.value ?? '' : null;
   }
 
   set(name, value) {
-    const a = this.attrs.find((x) => x.name === name);
+    const a = this.attr(name);
     if (a) {
       if (a.value === value) return;
       a.value = value;
@@ -1243,6 +1279,7 @@ class Tag {
   }
 
   removeAttr(name) {
+    if (!this.attr(name)) return;
     const before = this.attrs.length;
     this.attrs = this.attrs.filter((x) => x.name !== name);
     if (this.attrs.length !== before) this.dirty = true;
@@ -1317,22 +1354,47 @@ function rewriteJs(code, base, check) {
     let isModule = false;
     // Names the script declares itself (as a variable, parameter, ...) are left alone.
     const skip = { location: false, top: false, parent: false };
-    const DECL = /\b(?:var|let|const|function|class)\s+(location|top|parent)\b|(?<=[(,]|(?<!\$)\{)\s*(location|top|parent)\s*(?=[,)}]|=(?!=))|\b(location|top|parent)\s*=>|\.\.\.\s*(location|top|parent)\b/g;
-    for (let m, found = 0; found < 3 && (m = DECL.exec(src));) {
-      const name = m[1] || m[2] || m[3] || m[4];
-      if (!skip[name]) { skip[name] = true; found++; }
+    // Each mention is checked by hand: one big regex with lookbehinds was the
+    // slowest part of the rewrite.
+    const ws = (c) => c === 32 || (c >= 9 && c <= 13) || (c > 127 && /\s/.test(String.fromCharCode(c)));
+    const word = (c) => (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 95;
+    const declared = (s, e) => {
+      let a = s;
+      while (a > 0 && ws(src.charCodeAt(a - 1))) a--;
+      let b = e;
+      while (b < src.length && ws(src.charCodeAt(b))) b++;
+      // var top / function parent / class location
+      if (a < s) {
+        for (const kw of ['var', 'let', 'const', 'function', 'class']) {
+          const k = a - kw.length;
+          if (k >= 0 && src.startsWith(kw, k) && !word(src.charCodeAt(k - 1))) return true;
+        }
+      }
+      const pc = src.charCodeAt(a - 1);
+      const nc = src.charCodeAt(b);
+      // A parameter or destructured name: (top, ...) / { parent = x }
+      if ((pc === 40 || pc === 44 || (pc === 123 && src.charCodeAt(a - 2) !== 36)) &&
+        (nc === 44 || nc === 41 || nc === 125 || (nc === 61 && src.charCodeAt(b + 1) !== 61))) return true;
+      // top => ... / ...parent
+      return (nc === 61 && src.charCodeAt(b + 1) === 62) || (a >= 3 && src.startsWith('...', a - 3));
+    };
+    const NAME = /\b(?:location|top|parent)\b/g;
+    for (let m, found = 0; found < 3 && (m = NAME.exec(src));) {
+      if (!skip[m[0]] && declared(m.index, NAME.lastIndex)) { skip[m[0]] = true; found++; }
     }
     const fake = (n) => (n === 'location' ? '(globalThis.__px$L||location)' : `(globalThis.__px$${n}||${n})`);
     const P = (t, v) => t && t.t === 'p' && t.v === v;
     const isDot = (t) => t && t.t === 'p' && (t.v === '.' || t.v === '?.');
-    const isAssign = (t) => t && t.t === 'p' && /^(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=$/.test(t.v);
+    const ASSIGN = new Set(['=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '**=', '<<=', '>>=', '>>>=', '&&=', '||=', '??=']);
+    const isAssign = (t) => t && t.t === 'p' && ASSIGN.has(t.v);
     const WIN = new Set(['window', 'self', 'globalThis', 'document', 'top', 'parent']);
 
     const stack = []; // open brackets: { cls, ev: [edit indexes] | null }
     let pendingClass = false;
     const inClass = () => stack.length > 0 && stack[stack.length - 1].cls;
     // A bare name in a class body right after `{ } ;`, a value or a modifier is a member name.
-    const classMember = (p) => inClass() && (!p || p.t !== 'p' || ['{', '}', ';', ')', ']', '*'].includes(p.v));
+    const MEMBER_AFTER = new Set(['{', '}', ';', ')', ']', '*']);
+    const classMember = (p) => inClass() && (!p || p.t !== 'p' || MEMBER_AFTER.has(p.v));
     const objectKey = (p, nx) => (P(p, '{') || P(p, ',')) && (P(nx, ':') || P(nx, '('));
 
     for (let k = 0; k < toks.length; k++) {
@@ -1538,9 +1600,16 @@ function rewriteJs(code, base, check) {
         i = e;
         continue;
       }
-      PUNCT.lastIndex = i;
-      m = PUNCT.exec(src);
-      const v = m ? m[0] : ch;
+      // Punctuation that can't start a longer operator skips the regex.
+      let v;
+      const d = src.charCodeAt(i + 1);
+      if (c === 40 || c === 41 || c === 123 || c === 125 || c === 91 || c === 93 || c === 59 || c === 44 || c === 58 ||
+        c === 126 || c === 64 || (c === 46 && d !== 46) || (c === 61 && d !== 61 && d !== 62)) v = ch;
+      else {
+        PUNCT.lastIndex = i;
+        m = PUNCT.exec(src);
+        v = m ? m[0] : ch;
+      }
       const tok = { t: 'p', s: i, e: i + v.length, v };
       if (v === '{') braces.push('b');
       else if (v === '}') braces.pop();
@@ -2113,20 +2182,22 @@ function runtime(C, rewriteJs, mapSrcset, rewriteCss, workerRuntime) {
   // A page embedding the outermost frame (the Knoiren UI) can take over new
   // windows: it answers a 'nav' report with { __px: 'host' }, and from then on
   // pop-ups and target=_blank links are posted to it as { __px: 'open' }.
-  // The UI (and only the UI's origin) can also run bookmarklets: { __px: 'run' }.
+  // The UI (and only the UI's origins; '*' is any) can also run bookmarklets
+  // ({ __px: 'run' }) and mute the tab ({ __px: 'mute' }).
   let hostOpens = false;
-  let uiOrigin = '';
-  try { uiOrigin = new URL(C.uiOrigin || location.protocol + '//' + location.hostname + ':' + C.uiPort).origin; } catch (e) {}
+  let uiOrigins = C.uiOrigins || [];
+  if (!C.uiOrigins) try { uiOrigins = [new URL(location.protocol + '//' + location.hostname + ':' + C.uiPort).origin]; } catch (e) {}
+  const fromUi = (e) => uiOrigins.indexOf('*') >= 0 || uiOrigins.indexOf(e.origin) >= 0;
   if (!nested && window.parent !== window) {
     addEventListener('message', (e) => {
       if (e.source !== window.parent || !e.data) return;
       if (e.data.__px === 'host') {
         hostOpens = true;
         e.stopImmediatePropagation();
-      } else if (e.data.__px === 'run' && uiOrigin && e.origin === uiOrigin && typeof e.data.code === 'string') {
+      } else if (e.data.__px === 'run' && fromUi(e) && typeof e.data.code === 'string') {
         e.stopImmediatePropagation();
         try { (0, eval)(js(e.data.code)); } catch (err) { console.error(err); }
-      } else if (e.data.__px === 'mute' && uiOrigin && e.origin === uiOrigin) {
+      } else if (e.data.__px === 'mute' && fromUi(e)) {
         e.stopImmediatePropagation();
         window.__px$setMuted(!!e.data.muted);
       }
@@ -2785,7 +2856,7 @@ const RUNTIME_TAIL = `,${rewriteJs},${mapSrcset},${rewriteCss},${workerRuntime})
 function runtimeScript(upstream, prefix, swReload) {
   const json = JSON.stringify({
     upstream: upstream.href, prefix, swReload, cookieSite: cookieSite(upstream.hostname),
-    uiPort: UI_PORT, uiOrigin: UI_ORIGIN,
+    uiPort: UI_PORT, uiOrigins: UI_ORIGINS,
   }).replace(/</g, '\\u003c');
   return RUNTIME_HEAD + json + RUNTIME_TAIL;
 }
@@ -2869,6 +2940,8 @@ const server = http.createServer({ maxHeaderSize: 256 * 1024 }, async (req, res)
     res.end(String((err && err.message) || err));
   }
 });
+// Keep idle browser connections open between page loads (Node's default is 5 s).
+server.keepAliveTimeout = 65_000;
 
 // WebSockets: resolve the target like any request, then splice the raw
 // sockets together after sending the upgrade request upstream.
@@ -3012,7 +3085,7 @@ function banner() {
     const t = i / (all.length - 1);
     return rgb(Math.round(167 - 133 * t), Math.round(139 + 72 * t), Math.round(250 - 12 * t))(ch);
   }).join('');
-  const uiUrl = UI_ORIGIN || `http://localhost:${UI_PORT}`;
+  const uiUrl = (UI_ORIGINS || []).find((o) => o !== '*') || `http://localhost:${UI_PORT}`;
   const proxyUrl = PROXY_ORIGIN || `http://localhost:${PORT}`;
   const row = (dot, label, url) => `  ${dot} ${label.padEnd(8)}${bold(url)}`;
   return [
