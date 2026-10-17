@@ -76,19 +76,6 @@ Start Command:
 node proxy.js
 ```
 
-
-For your own frontend configuration, use:
-
-```js
-UI_ORIGIN = "https://your-site.com"
-```
-
-To use this repository's GitHub Pages frontend, use:
-
-```js
-UI_ORIGIN = "https://ltorl.github.io"
-```
-
 It would be greatly appreciated if you hosted a backend and submitted a pull request to this README so others can use it.
 
 </details>
