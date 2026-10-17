@@ -2179,7 +2179,8 @@
 
             note(location.origin === 'null'
                 ? 'Bookmarklets and tab muting need this page served over http(s); opened as a file, the proxy can’t tell it apart from a site.'
-                : 'Bookmarklets and tab muting only work if the proxy was started with UI_ORIGIN=' + location.origin + '.');
+                : 'Bookmarklets and tab muting work from any origin by default. If the proxy was started with UI_ORIGIN set, ' +
+                    'it must include ' + location.origin + ' (or *).');
         }
 
         function buildWindowSection(inner) {
