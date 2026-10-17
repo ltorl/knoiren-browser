@@ -6,7 +6,6 @@ COPY proxy.js ./
 
 ENV HOST=0.0.0.0
 ENV PORT=8787
-ENV UI_ORIGIN=https://ltorl.github.io
 
 EXPOSE 8787
 
