@@ -1,10 +1,15 @@
-// Use this to host a proxy backend for use with index.html 
-// you will have to use an ENV variable to use bookmarklets and site muting: UI_ORIGIN=https://<your-site>.com
+// Use this to host a proxy backend for use with index.html (or any page that
+// embeds it). Only the proxy: no UI server; index.js has both.
 //
 // Peekaboom (Node): serves any public site so it can be embedded in an <iframe>.
 //
-//   node index.js              (Node 20+, no dependencies; PORT=8787 HOST=0.0.0.0 by default)
+//   node proxy.js              (Node 20+, no dependencies; PORT=8787 HOST=0.0.0.0 by default)
 //   <iframe src="https://<host>/__px/https://example.com/"></iframe>
+//
+// UI_ORIGIN: the origins whose pages may run bookmarklets and mute tabs in
+// proxied pages, comma-separated (UI_ORIGIN=https://a.example,https://b.example).
+// Unset or *, any origin can: any page that embeds the proxy can then run
+// code in the pages it shows.
 //
 // Everything is in this one file: the HTTP server, the proxy, a small HTML
 // rewriter and the script injected into every page.
@@ -14,6 +19,7 @@ import net from 'node:net';
 import zlib from 'node:zlib';
 import tls from 'node:tls';
 import dns from 'node:dns/promises';
+import fs from 'node:fs';
 import os from 'node:os';
 import { Transform, pipeline } from 'node:stream';
 import vm from 'node:vm';
@@ -23,8 +29,20 @@ import { pathToFileURL } from 'node:url';
 
 const PORT = Number(process.env.PORT) || 8787;
 const HOST = process.env.HOST || '0.0.0.0';
+const UI_ORIGINS = parseOrigins(process.env.UI_ORIGIN) || ['*'];
 const PREFIX = '/__px/';
 const ORIGIN_COOKIE = '__px_origin';
+
+// "https://a.example, https://b.example" or "*" -> ['https://a.example', ...] / ['*']
+function parseOrigins(value) {
+  if (!value || !value.trim()) return null;
+  const list = [];
+  for (const o of value.split(/[\s,]+/).filter(Boolean)) {
+    if (o === '*') { list.push(o); continue; }
+    try { list.push(new URL(o).origin); } catch { if (isMainThread) console.warn(`UI_ORIGIN: ignoring ${o} (not a URL)`); }
+  }
+  return list;
+}
 const UPSTREAM_TIMEOUT_MS = 100_000; // time to response headers; slow origins can take 30s+
 const MAX_BUFFERED_BYTES = 16 * 1024 * 1024; // CSS / JS rewriting buffers the body (HTML streams)
 
@@ -342,8 +360,10 @@ function originFromReferer(request, self) {
   return up && up.origin;
 }
 
+const ORIGIN_COOKIE_RE = new RegExp(`(?:^|;\\s*)${ORIGIN_COOKIE}=([^;]+)`);
+
 function originFromCookie(request) {
-  const m = (request.headers.get('cookie') || '').match(new RegExp(`(?:^|;\\s*)${ORIGIN_COOKIE}=([^;]+)`));
+  const m = (request.headers.get('cookie') || '').match(ORIGIN_COOKIE_RE);
   if (!m) return null;
   try {
     const u = new URL(decodeURIComponent(m[1]));
@@ -673,14 +693,23 @@ async function assetBody(entry, accept, headers) {
   return body;
 }
 
-// Worker threads run this same file; see the bottom of it.
+// Worker threads run this same file; see the bottom of it. Piped in
+// (`curl … | node`) there is no file for them to load, so rewriting runs inline.
+const WORKER_URL = (() => {
+  try {
+    const u = new URL(import.meta.url);
+    return u.protocol === 'file:' && fs.existsSync(u) ? u : null;
+  } catch {
+    return null;
+  }
+})();
 const POOL_SIZE = Math.max(1, Math.min(8, (os.availableParallelism ? os.availableParallelism() : os.cpus().length) - 1));
 const pool = []; // { w, task }
 const jobQueue = [];
 let workerFailures = 0;
 
 function runInWorker(job, bytes) {
-  if (workerFailures >= 3) return Promise.resolve().then(() => rewriteAssetSync(job, bytes));
+  if (!WORKER_URL || workerFailures >= 3) return Promise.resolve().then(() => rewriteAssetSync(job, bytes));
   return new Promise((resolve, reject) => {
     jobQueue.push({ job, bytes, resolve, reject });
     pump();
@@ -702,7 +731,7 @@ function pump() {
 }
 
 function spawnWorker() {
-  const w = new Worker(new URL(import.meta.url), { workerData: { peekaboomRewriter: true } });
+  const w = new Worker(WORKER_URL, { workerData: { peekaboomRewriter: true } });
   const slot = { w, task: null };
   w.unref();
   w.on('message', (m) => {
@@ -740,10 +769,13 @@ function spawnWorker() {
 const HTML_CHARSET = /<meta[^>]+charset=["']?([\w-]+)/i;
 
 // Rewrites an HTML response body as it arrives. The charset is settled from
-// the first 4 KB like decodeText() does; a page with no declared charset is
-// read whole, since telling UTF-8 from windows-1252 needs every byte.
+// the first 4 KB like decodeText() does (or the first 3 bytes, for a BOM, when
+// the Content-Type names one, so rewriting starts with the first chunk); a
+// page with no declared charset is read whole, since telling UTF-8 from
+// windows-1252 needs every byte.
 function htmlStream(contentType, upstream) {
   const rewrite = htmlRewriter(upstream);
+  const headNeeded = /charset=["']?[\w-]+/i.test(contentType || '') ? 3 : 4096;
   let head = [];
   let headLength = 0;
   let decoder = null;
@@ -766,7 +798,7 @@ function htmlStream(contentType, upstream) {
         else {
           head.push(chunk);
           headLength += chunk.length;
-          if (headLength >= 4096) s = start(Buffer.concat(head));
+          if (headLength >= headNeeded) s = start(Buffer.concat(head));
         }
       } catch (e) { return cb(e); }
       cb(null, s ? Buffer.from(s) : undefined);
@@ -791,6 +823,8 @@ let rewriteCacheSize = 0;
 
 function cached(kind, base, input, fn) {
   if (input.length < 2048) return fn(input);
+  // Only imports depend on the page's address; other scripts are shared by every page.
+  if (kind === 'js' && !/\b(?:import|from)\b/.test(input)) base = '';
   const key = crypto.createHash('sha1').update(`${kind}\0${base}\0`).update(input).digest('base64');
   const hit = rewriteCache.get(key);
   if (hit != null) {
@@ -945,7 +979,7 @@ function htmlRewriter(upstream, base = upstream) {
       if (style != null) t.set('style', rewriteCss(style, ctx.base));
       t.removeAttr('integrity');
       for (const a of t.attrs) {
-        if (/^on/i.test(a.name)) t.set(a.name, rewriteJs(a.value));
+        if (a.name.charCodeAt(0) === 111 && a.name.charCodeAt(1) === 110) t.set(a.name, rewriteJs(a.value)); // on*
       }
 
       const href = t.get('href');
@@ -1077,7 +1111,15 @@ function usagePage(self) {
 // Everything it doesn't touch is copied through byte for byte.
 
 const RAW_TEXT = new Set(['script', 'style', 'textarea', 'title', 'xmp', 'iframe', 'noembed', 'noframes', 'noscript']);
-const SPACE = new Set([' ', '\t', '\n', '\r', '\f']);
+const isSpace = (c) => c === 32 || c === 10 || c === 9 || c === 13 || c === 12;
+const isAlpha = (c) => (c >= 97 && c <= 122) || (c >= 65 && c <= 90);
+// One end-tag regex per raw-text element name, reused (lastIndex is set before each use).
+const CLOSE_TAG = new Map();
+const closeTag = (name) => {
+  let re = CLOSE_TAG.get(name);
+  if (!re) CLOSE_TAG.set(name, re = new RegExp(`</${name}[\\s/>]`, 'ig'));
+  return re;
+};
 
 // Returns write(chunk, final): the input may arrive in pieces, and whatever
 // can't be handled yet (a tag cut in half, a <script> without its end tag)
@@ -1129,7 +1171,7 @@ function htmlTransformer({ tag: onTag, rawText: onRawText }) {
         out.push(html.slice(lt, i));
         continue;
       }
-      if (!/[a-zA-Z]/.test(c)) { out.push('<'); i = lt + 1; continue; }
+      if (!isAlpha(html.charCodeAt(lt + 1))) { out.push('<'); i = lt + 1; continue; }
 
       const t = parseTag(html, lt);
       if (!t) { // unterminated tag
@@ -1141,7 +1183,7 @@ function htmlTransformer({ tag: onTag, rawText: onRawText }) {
       i = t.end;
       onTag(t);
       out.push(t.toString(), t.appended);
-      if (RAW_TEXT.has(t.name)) raw = { t, close: new RegExp(`</${t.name}[\\s/>]`, 'ig'), scan: i };
+      if (RAW_TEXT.has(t.name)) raw = { t, close: closeTag(t.name), scan: i };
     }
     rest = i < n ? html.slice(i) : '';
     return out.join('');
@@ -1151,25 +1193,26 @@ function htmlTransformer({ tag: onTag, rawText: onRawText }) {
 function parseTag(s, start) {
   const n = s.length;
   let i = start + 1;
-  while (i < n && !SPACE.has(s[i]) && s[i] !== '/' && s[i] !== '>') i++;
+  let c;
+  while (i < n && !isSpace(c = s.charCodeAt(i)) && c !== 47 && c !== 62) i++; // '/' '>'
   const rawName = s.slice(start + 1, i);
   const attrs = [];
   while (i < n) {
-    while (i < n && (SPACE.has(s[i]) || s[i] === '/')) i++;
+    while (i < n && (isSpace(c = s.charCodeAt(i)) || c === 47)) i++;
     if (i >= n) return null;
-    if (s[i] === '>') {
-      return new Tag(rawName, attrs, s[i - 1] === '/', s.slice(start, i + 1), i + 1);
+    if (c === 62) {
+      return new Tag(rawName, attrs, s.charCodeAt(i - 1) === 47, s.slice(start, i + 1), i + 1);
     }
     const nameStart = i;
     i++; // the first character always belongs to the name (even "=")
-    while (i < n && !SPACE.has(s[i]) && !'/>='.includes(s[i])) i++;
+    while (i < n && !isSpace(c = s.charCodeAt(i)) && c !== 47 && c !== 62 && c !== 61) i++; // '/' '>' '='
     const name = s.slice(nameStart, i);
     let value = null;
     let p = i;
-    while (p < n && SPACE.has(s[p])) p++;
-    if (s[p] === '=') {
+    while (p < n && isSpace(s.charCodeAt(p))) p++;
+    if (s.charCodeAt(p) === 61) {
       p++;
-      while (p < n && SPACE.has(s[p])) p++;
+      while (p < n && isSpace(s.charCodeAt(p))) p++;
       const q = s[p];
       if (q === '"' || q === "'") {
         const e = s.indexOf(q, p + 1);
@@ -1178,7 +1221,7 @@ function parseTag(s, start) {
         i = e + 1;
       } else {
         let e = p;
-        while (e < n && !SPACE.has(s[e]) && s[e] !== '>') e++;
+        while (e < n && !isSpace(c = s.charCodeAt(e)) && c !== 62) e++;
         value = s.slice(p, e);
         i = e;
       }
@@ -1206,13 +1249,19 @@ class Tag {
     this.appended = '';
   }
 
+  attr(name) {
+    const attrs = this.attrs;
+    for (let i = 0; i < attrs.length; i++) if (attrs[i].name === name) return attrs[i];
+    return undefined;
+  }
+
   get(name) {
-    const a = this.attrs.find((x) => x.name === name);
+    const a = this.attr(name);
     return a ? a.value ?? '' : null;
   }
 
   set(name, value) {
-    const a = this.attrs.find((x) => x.name === name);
+    const a = this.attr(name);
     if (a) {
       if (a.value === value) return;
       a.value = value;
@@ -1224,6 +1273,7 @@ class Tag {
   }
 
   removeAttr(name) {
+    if (!this.attr(name)) return;
     const before = this.attrs.length;
     this.attrs = this.attrs.filter((x) => x.name !== name);
     if (this.attrs.length !== before) this.dirty = true;
@@ -1242,7 +1292,7 @@ class Tag {
   }
 }
 
-const NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
+const NAMED = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0' };
 
 function decodeEntities(s) {
   if (!s.includes('&')) return s;
@@ -1298,22 +1348,47 @@ function rewriteJs(code, base, check) {
     let isModule = false;
     // Names the script declares itself (as a variable, parameter, ...) are left alone.
     const skip = { location: false, top: false, parent: false };
-    const DECL = /\b(?:var|let|const|function|class)\s+(location|top|parent)\b|(?<=[(,]|(?<!\$)\{)\s*(location|top|parent)\s*(?=[,)}]|=(?!=))|\b(location|top|parent)\s*=>|\.\.\.\s*(location|top|parent)\b/g;
-    for (let m, found = 0; found < 3 && (m = DECL.exec(src));) {
-      const name = m[1] || m[2] || m[3] || m[4];
-      if (!skip[name]) { skip[name] = true; found++; }
+    // Each mention is checked by hand: one big regex with lookbehinds was the
+    // slowest part of the rewrite.
+    const ws = (c) => c === 32 || (c >= 9 && c <= 13) || (c > 127 && /\s/.test(String.fromCharCode(c)));
+    const word = (c) => (c >= 97 && c <= 122) || (c >= 65 && c <= 90) || (c >= 48 && c <= 57) || c === 95;
+    const declared = (s, e) => {
+      let a = s;
+      while (a > 0 && ws(src.charCodeAt(a - 1))) a--;
+      let b = e;
+      while (b < src.length && ws(src.charCodeAt(b))) b++;
+      // var top / function parent / class location
+      if (a < s) {
+        for (const kw of ['var', 'let', 'const', 'function', 'class']) {
+          const k = a - kw.length;
+          if (k >= 0 && src.startsWith(kw, k) && !word(src.charCodeAt(k - 1))) return true;
+        }
+      }
+      const pc = src.charCodeAt(a - 1);
+      const nc = src.charCodeAt(b);
+      // A parameter or destructured name: (top, ...) / { parent = x }
+      if ((pc === 40 || pc === 44 || (pc === 123 && src.charCodeAt(a - 2) !== 36)) &&
+        (nc === 44 || nc === 41 || nc === 125 || (nc === 61 && src.charCodeAt(b + 1) !== 61))) return true;
+      // top => ... / ...parent
+      return (nc === 61 && src.charCodeAt(b + 1) === 62) || (a >= 3 && src.startsWith('...', a - 3));
+    };
+    const NAME = /\b(?:location|top|parent)\b/g;
+    for (let m, found = 0; found < 3 && (m = NAME.exec(src));) {
+      if (!skip[m[0]] && declared(m.index, NAME.lastIndex)) { skip[m[0]] = true; found++; }
     }
     const fake = (n) => (n === 'location' ? '(globalThis.__px$L||location)' : `(globalThis.__px$${n}||${n})`);
     const P = (t, v) => t && t.t === 'p' && t.v === v;
     const isDot = (t) => t && t.t === 'p' && (t.v === '.' || t.v === '?.');
-    const isAssign = (t) => t && t.t === 'p' && /^(?:[-+*/%&|^]|\*\*|<<|>>>?|&&|\|\||\?\?)?=$/.test(t.v);
+    const ASSIGN = new Set(['=', '+=', '-=', '*=', '/=', '%=', '&=', '|=', '^=', '**=', '<<=', '>>=', '>>>=', '&&=', '||=', '??=']);
+    const isAssign = (t) => t && t.t === 'p' && ASSIGN.has(t.v);
     const WIN = new Set(['window', 'self', 'globalThis', 'document', 'top', 'parent']);
 
     const stack = []; // open brackets: { cls, ev: [edit indexes] | null }
     let pendingClass = false;
     const inClass = () => stack.length > 0 && stack[stack.length - 1].cls;
     // A bare name in a class body right after `{ } ;`, a value or a modifier is a member name.
-    const classMember = (p) => inClass() && (!p || p.t !== 'p' || ['{', '}', ';', ')', ']', '*'].includes(p.v));
+    const MEMBER_AFTER = new Set(['{', '}', ';', ')', ']', '*']);
+    const classMember = (p) => inClass() && (!p || p.t !== 'p' || MEMBER_AFTER.has(p.v));
     const objectKey = (p, nx) => (P(p, '{') || P(p, ',')) && (P(nx, ':') || P(nx, '('));
 
     for (let k = 0; k < toks.length; k++) {
@@ -1519,9 +1594,16 @@ function rewriteJs(code, base, check) {
         i = e;
         continue;
       }
-      PUNCT.lastIndex = i;
-      m = PUNCT.exec(src);
-      const v = m ? m[0] : ch;
+      // Punctuation that can't start a longer operator skips the regex.
+      let v;
+      const d = src.charCodeAt(i + 1);
+      if (c === 40 || c === 41 || c === 123 || c === 125 || c === 91 || c === 93 || c === 59 || c === 44 || c === 58 ||
+        c === 126 || c === 64 || (c === 46 && d !== 46) || (c === 61 && d !== 61 && d !== 62)) v = ch;
+      else {
+        PUNCT.lastIndex = i;
+        m = PUNCT.exec(src);
+        v = m ? m[0] : ch;
+      }
       const tok = { t: 'p', s: i, e: i + v.length, v };
       if (v === '{') braces.push('b');
       else if (v === '}') braces.pop();
@@ -2091,8 +2173,41 @@ function runtime(C, rewriteJs, mapSrcset, rewriteCss, workerRuntime) {
     navigator.sendBeacon = (url, data) => _beacon(prox(url), data);
   }
 
+  // A page embedding the outermost frame (the Knoiren UI) can take over new
+  // windows: it answers a 'nav' report with { __px: 'host' }, and from then on
+  // pop-ups and target=_blank links are posted to it as { __px: 'open' }.
+  // The UI (and only the UI's origins; '*' is any) can also run bookmarklets
+  // ({ __px: 'run' }) and mute the tab ({ __px: 'mute' }).
+  let hostOpens = false;
+  let uiOrigins = C.uiOrigins || [];
+  if (!C.uiOrigins) try { uiOrigins = [new URL(location.protocol + '//' + location.hostname + ':' + C.uiPort).origin]; } catch (e) {}
+  const fromUi = (e) => uiOrigins.indexOf('*') >= 0 || uiOrigins.indexOf(e.origin) >= 0;
+  if (!nested && window.parent !== window) {
+    addEventListener('message', (e) => {
+      if (e.source !== window.parent || !e.data) return;
+      if (e.data.__px === 'host') {
+        hostOpens = true;
+        e.stopImmediatePropagation();
+      } else if (e.data.__px === 'run' && fromUi(e) && typeof e.data.code === 'string') {
+        e.stopImmediatePropagation();
+        try { (0, eval)(js(e.data.code)); } catch (err) { console.error(err); }
+      } else if (e.data.__px === 'mute' && fromUi(e)) {
+        e.stopImmediatePropagation();
+        window.__px$setMuted(!!e.data.muted);
+      }
+    }, true);
+  }
+  const isNewWindow = (name) => name == null || name === '' || String(name).toLowerCase() === '_blank';
+  function hostOpen(url, user) {
+    try { window.parent.postMessage({ __px: 'open', url, user }, '*'); } catch (e) {}
+  }
+
   const _wopen = window.open;
   window.open = function (url, name, ...rest) {
+    if (hostOpens && isNewWindow(name)) {
+      hostOpen(url == null || url === '' ? 'about:blank' : unprox(String(prox(url))), false);
+      return null;
+    }
     const t = frameTarget(name);
     return _wopen.call(this, url == null || url === '' ? url : prox(url), t == null ? name : t, ...rest);
   };
@@ -2489,12 +2604,19 @@ function runtime(C, rewriteJs, mapSrcset, rewriteCss, workerRuntime) {
     const a = e.target && e.target.closest && e.target.closest('a[href], area[href]');
     if (!a || a.hasAttribute('download')) return;
     const raw = _getAttr.call(a, 'href');
-    if (!raw || raw[0] === '#' || isProxied(raw)) return;
+    if (!raw || raw[0] === '#') return;
     let x;
     try { x = new URL(a.href); } catch (err) { return; } // the site's URL (see the href getter above)
     if (!/^https?:$/.test(x.protocol)) return;
     const here = new URL(upHere());
     if (x.hash && x.origin === here.origin && x.pathname === here.pathname && x.search === here.search) return;
+    // An empty link target means the same frame (unlike window.open's empty name).
+    if (hostOpens && /^_blank$/i.test(a.getAttribute('target') || baseTarget() || '') && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      e.preventDefault();
+      hostOpen(x.href, true);
+      return;
+    }
+    if (isProxied(raw)) return;
     const t = frameTarget(a.getAttribute('target') || baseTarget());
     if (t != null) _setAttr.call(a, 'target', t);
     _setAttr.call(a, 'href', prox(x.href));
@@ -2516,9 +2638,176 @@ function runtime(C, rewriteJs, mapSrcset, rewriteCss, workerRuntime) {
     };
   }
 
+  // Tab mute. The UI sends { __px: 'mute', muted } to the outermost proxied
+  // frame, which keeps the flag for all its frames. Media elements are muted on
+  // top of whatever the page itself asked for (the page still reads its own
+  // value), and Web Audio contexts are suspended. Each frame reports sound
+  // changes to the outermost one, which tells the UI { __px: 'audio', audible }.
+  const tabMuted = () => { try { return !!pxTop.__px$muted; } catch (e) { return false; } };
+  const mutedDesc = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, 'muted');
+  const mediaWish = new WeakMap();
+  const mediaSeen = new Set();
+  const pageMuted = (el) => (mediaWish.has(el) ? mediaWish.get(el) : mutedDesc.get.call(el));
+  function applyMediaMute(el) {
+    const want = pageMuted(el) || tabMuted();
+    if (mutedDesc.get.call(el) !== want) {
+      if (!mediaWish.has(el)) mediaWish.set(el, mutedDesc.get.call(el));
+      mutedDesc.set.call(el, want);
+    }
+  }
+  Object.defineProperty(HTMLMediaElement.prototype, 'muted', {
+    configurable: true, enumerable: true,
+    get() { return pageMuted(this); },
+    set(v) { mediaWish.set(this, !!v); mutedDesc.set.call(this, !!v || tabMuted()); },
+  });
+  function trackMedia(el) {
+    mediaSeen.add(el);
+    applyMediaMute(el);
+  }
+  const shadowRoots = new Set();
+  function allMedia() {
+    for (const el of mediaSeen) if (!el.isConnected && el.paused) mediaSeen.delete(el);
+    const list = new Set(mediaSeen);
+    try { document.querySelectorAll('audio, video').forEach((el) => list.add(el)); } catch (e) {}
+    for (const r of shadowRoots) {
+      if (!r.host.isConnected) continue;
+      try { r.querySelectorAll('audio, video').forEach((el) => list.add(el)); } catch (e) {}
+    }
+    return list;
+  }
+  const _play = HTMLMediaElement.prototype.play;
+  HTMLMediaElement.prototype.play = function () {
+    trackMedia(this);
+    return _play.apply(this, arguments);
+  };
+  const audioContexts = new Set();
+  const ctxHeld = new WeakSet(); // suspended by us, or asked to resume while muted
+  const acWrapped = new Map();
+  for (const name of ['AudioContext', 'webkitAudioContext']) {
+    const AC = window[name];
+    if (typeof AC !== 'function' || AC.__px$wrapped) continue;
+    if (acWrapped.has(AC)) { window[name] = acWrapped.get(AC); continue; }
+    const _resume = AC.prototype.resume;
+    AC.prototype.resume = function () {
+      if (tabMuted() && audioContexts.has(this)) { ctxHeld.add(this); return Promise.resolve(); }
+      return _resume.apply(this, arguments);
+    };
+    const Wrapped = class extends AC {
+      constructor(...a) {
+        super(...a);
+        audioContexts.add(this);
+        // Some contexts start or restart on their own (e.g. after a user gesture).
+        this.addEventListener('statechange', () => {
+          if (tabMuted() && this.state === 'running') { ctxHeld.add(this); this.suspend().catch(() => {}); }
+          soundChanged();
+        });
+        if (tabMuted()) { ctxHeld.add(this); this.suspend().catch(() => {}); }
+      }
+    };
+    Object.defineProperty(Wrapped, 'name', { value: name });
+    Object.defineProperty(Wrapped, '__px$wrapped', { value: true });
+    acWrapped.set(AC, Wrapped);
+    window[name] = Wrapped;
+  }
+  // Speech synthesis is per window: cancelled on mute and blocked while muted.
+  const speech = window.speechSynthesis;
+  if (speech && typeof speech.speak === 'function') {
+    const _speak = speech.speak;
+    speech.speak = function (u) {
+      if (tabMuted()) {
+        try { u && u.dispatchEvent && u.dispatchEvent(new Event('end')); } catch (e) {}
+        return;
+      }
+      const r = _speak.apply(this, arguments);
+      soundChanged();
+      try { u.addEventListener('end', soundChanged); u.addEventListener('error', soundChanged); } catch (e) {}
+      return r;
+    };
+  }
+  function applyMute() {
+    const m = tabMuted();
+    if (m && speech) { try { speech.cancel(); } catch (e) {} }
+    allMedia().forEach(applyMediaMute);
+    for (const c of audioContexts) {
+      if (c.state === 'closed') { audioContexts.delete(c); continue; }
+      if (m && c.state === 'running') { ctxHeld.add(c); c.suspend().catch(() => {}); }
+      else if (!m && ctxHeld.has(c)) { ctxHeld.delete(c); c.resume().catch(() => {}); }
+    }
+  }
+  // Sound the page is making or wants to make, ignoring the tab's mute.
+  function audibleHere() {
+    for (const el of allMedia()) {
+      try { if (!el.paused && !el.ended && !pageMuted(el) && el.volume > 0) return true; } catch (e) {}
+    }
+    for (const c of audioContexts) if (c.state === 'running' || ctxHeld.has(c)) return true;
+    try { if (speech && speech.speaking) return true; } catch (e) {}
+    return false;
+  }
+  function audibleIn(w) {
+    try {
+      if (w.__px$audible && w.__px$audible()) return true;
+      for (let i = 0; i < w.frames.length; i++) if (audibleIn(w.frames[i])) return true;
+    } catch (e) {}
+    return false;
+  }
+  function muteIn(w) {
+    try {
+      if (w.__px$applyMute) w.__px$applyMute();
+      for (let i = 0; i < w.frames.length; i++) muteIn(w.frames[i]);
+    } catch (e) {}
+  }
+  let lastAudible = false;
+  let audioTimer = 0;
+  function audioCheck() {
+    audioTimer = 0;
+    const a = audibleIn(window);
+    if (a === lastAudible) return;
+    lastAudible = a;
+    try { window.parent.postMessage({ __px: 'audio', audible: a }, '*'); } catch (e) {}
+  }
+  function soundChanged() {
+    try { pxTop.__px$soundChanged && pxTop.__px$soundChanged(); } catch (e) {}
+  }
+  // Media is caught as soon as it starts loading, before it can make a sound.
+  function listenMedia(target) {
+    for (const t of ['loadstart', 'loadedmetadata', 'play', 'playing', 'pause', 'ended', 'volumechange', 'emptied']) {
+      target.addEventListener(t, (e) => {
+        if (!(e.target instanceof HTMLMediaElement)) return;
+        if (t !== 'pause' && t !== 'ended' && t !== 'emptied') trackMedia(e.target);
+        soundChanged();
+      }, true);
+    }
+  }
+  listenMedia(window);
+  const _attachShadow = Element.prototype.attachShadow;
+  if (_attachShadow) {
+    Element.prototype.attachShadow = function () {
+      const r = _attachShadow.apply(this, arguments);
+      shadowRoots.add(r);
+      listenMedia(r);
+      return r;
+    };
+  }
+  hidden(window, '__px$audible', audibleHere);
+  hidden(window, '__px$applyMute', applyMute);
+  if (!nested) {
+    hidden(window, '__px$muted', false);
+    hidden(window, '__px$soundChanged', () => { if (!audioTimer) audioTimer = setTimeout(audioCheck, 60); });
+    hidden(window, '__px$setMuted', (m) => {
+      hidden(window, '__px$muted', !!m);
+      muteIn(window);
+    });
+  }
+
   function report() {
     if (nested || window.parent === window) return;
-    try { window.parent.postMessage({ __px: 'nav', url: upHere(), title: document.title }, '*'); } catch (e) {}
+    let icon = '';
+    try {
+      const l = document.querySelector("link[rel~='icon'][href], link[rel='apple-touch-icon'][href]");
+      if (l) icon = unprox(l.href);
+    } catch (e) {}
+    lastAudible = audibleIn(window);
+    try { window.parent.postMessage({ __px: 'nav', url: upHere(), title: document.title, icon, audible: lastAudible }, '*'); } catch (e) {}
   }
   addEventListener('popstate', report);
   addEventListener('hashchange', report);
@@ -2545,6 +2834,10 @@ function runtime(C, rewriteJs, mapSrcset, rewriteCss, workerRuntime) {
       try {
         cookieDesc.set.call(document, '__px_origin=' + encodeURIComponent(UP.origin) + cookieAttrs);
       } catch (e) {}
+      // Ask for the tab's mute state before the page can start any sound.
+      if (window.parent !== window) {
+        try { window.parent.postMessage({ __px: 'hello' }, '*'); } catch (e) {}
+      }
     }
   }
   perDoc();
@@ -2557,6 +2850,7 @@ const RUNTIME_TAIL = `,${rewriteJs},${mapSrcset},${rewriteCss},${workerRuntime})
 function runtimeScript(upstream, prefix, swReload) {
   const json = JSON.stringify({
     upstream: upstream.href, prefix, swReload, cookieSite: cookieSite(upstream.hostname),
+    uiOrigins: UI_ORIGINS,
   }).replace(/</g, '\\u003c');
   return RUNTIME_HEAD + json + RUNTIME_TAIL;
 }
@@ -2640,6 +2934,8 @@ const server = http.createServer({ maxHeaderSize: 256 * 1024 }, async (req, res)
     res.end(String((err && err.message) || err));
   }
 });
+// Keep idle browser connections open between page loads (Node's default is 5 s).
+server.keepAliveTimeout = 65_000;
 
 // WebSockets: resolve the target like any request, then splice the raw
 // sockets together after sending the upgrade request upstream.
@@ -2705,12 +3001,13 @@ server.on('upgrade', async (req, socket, head) => {
   }
 });
 
-// Imported (e.g. by index.test.js) it only provides the exports below.
-if (isMainThread && process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+// Imported (e.g. by index.test.js) it only provides the exports below. Run
+// directly, or piped in (`curl … | node`, where there is no script path), it serves.
+if (isMainThread && (!process.argv[1] || import.meta.url === pathToFileURL(process.argv[1]).href)) {
   server.listen(PORT, HOST, () => {
     console.log(`Peekaboom listening on http://localhost:${PORT}`);
     // Start the rewriting workers now rather than on the first big script.
-    while (pool.length < POOL_SIZE) spawnWorker();
+    if (WORKER_URL) while (pool.length < POOL_SIZE) spawnWorker();
   });
 }
 
