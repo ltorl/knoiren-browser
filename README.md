@@ -96,7 +96,9 @@ For use with the github pages frontend at: https://ltorl.github.io/knoiren-brows
 
 Go to: https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/open.svg <br>
 
-This wont be blocked because it would break real school sites
+This wont be blocked because it would break real school sites. <br>
+
+You will still have to add a backend from above
 
 <br>
 
