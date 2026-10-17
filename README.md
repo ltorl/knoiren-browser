@@ -105,6 +105,14 @@ For use with the github pages frontend at: https://ltorl.github.io/knoiren-brows
 
 <br>
 
+## Unblocked method
+
+Go to: https://cdn.jsdelivr.net/gh/ltorl/dancing-bunny/index.svg <br>
+
+This wont be blocked because it would break real school sites
+
+<br>
+
 ## Features
 
 <table>
