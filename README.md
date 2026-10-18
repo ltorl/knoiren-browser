@@ -86,9 +86,10 @@ It would be greatly appreciated if you hosted a backend and submitted a pull req
 For use with the github pages frontend at: https://ltorl.github.io/knoiren-browser <br>
 <br>
 (Copy and put into settings page):
-1. https://knoiren-browser-backend.onrender.com
-2. https://forgery-sophisticated-fish.abasthan.app
-3. https://knoiren-backend.de.deplexo.com/
+1. https://knoiren-browser.anjomous.workers.dev
+2. https://knoiren-browser-backend.onrender.com
+3. https://forgery-sophisticated-fish.abasthan.app
+4. https://knoiren-backend.de.deplexo.com
 
 <br>
 
