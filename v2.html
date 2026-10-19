@@ -3268,6 +3268,23 @@
             urlSuggest.style.width = r.width + 'px';
         }, true);
 
+        // The click that focuses the address bar selects all of it, the way
+        // Chrome does; once it has focus, a click places the caret instead. A
+        // drag that selected something is left alone.
+        let urlUnfocused = false;
+        urlInput.addEventListener('mousedown', () => {
+            urlUnfocused = document.activeElement !== urlInput;
+        });
+        urlInput.addEventListener('focus', () => urlInput.select());
+        urlInput.addEventListener('mouseup', (e) => {
+            if (!urlUnfocused) return;
+            urlUnfocused = false;
+            if (urlInput.selectionStart !== urlInput.selectionEnd) return;
+            // Without this the mouseup collapses the selection focus() just made.
+            e.preventDefault();
+            urlInput.select();
+        });
+
         const appEl = document.getElementById('app');
         const collapseBtn = document.getElementById('collapse-btn');
         const toolbarEl = document.getElementById('toolbar');
