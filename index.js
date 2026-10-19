@@ -3620,11 +3620,13 @@ const UI_HTML = `<!DOCTYPE html>
         }
 
         #games-btn,
+        #music-btn,
         #settings-btn {
             margin-left: 2px;
         }
 
         #games-btn img,
+        #music-btn img,
         #settings-btn img {
             width: 22px;
             height: 22px;
@@ -3635,77 +3637,6 @@ const UI_HTML = `<!DOCTYPE html>
         #games-btn.active,
         #settings-btn.active {
             background: rgba(120, 170, 255, 0.18);
-        }
-
-        .sidebar {
-            position: absolute;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            width: 300px;
-            max-width: 80%;
-            background: var(--fg);
-            border-left: 1px solid rgba(255, 255, 255, 0.1);
-            border-top: 1px solid rgba(255, 255, 255, 0.06);
-            box-shadow: -18px 0 16px -16px rgba(0, 0, 0, 0.45);
-            z-index: 20;
-            display: flex;
-            flex-direction: column;
-            transform: translateX(100%);
-            visibility: hidden;
-            transition: transform 0.22s ease, visibility 0s linear 0.22s;
-        }
-
-        .sidebar.open {
-            transform: translateX(0);
-            visibility: visible;
-            transition: transform 0.22s ease;
-        }
-
-        .sidebar-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 14px 10px 14px 18px;
-            font-size: 1rem;
-            font-weight: 700;
-            color: var(--text);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-            flex: 0 0 auto;
-        }
-
-        .sidebar-close {
-            width: 30px;
-            height: 30px;
-            font-size: 20px;
-            color: var(--text);
-            line-height: 1;
-        }
-
-        .sidebar-body {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            padding: 12px;
-            overflow-y: auto;
-        }
-
-        #games-sidebar-list .gs-link {
-            padding: 12px 16px;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            color: var(--text);
-            font-size: 0.92rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.15s ease, transform 0.15s ease;
-        }
-
-        #games-sidebar-list .gs-link:hover {
-            background: #45a29e;
-            color: #0b0c10;
-            transform: translateX(-2px);
         }
 
         .settingspage {
@@ -4296,20 +4227,13 @@ const UI_HTML = `<!DOCTYPE html>
                     <button id="star-btn" class="icon-btn" title="Bookmark this page"></button>
                 </div>
                 <button id="games-btn" class="icon-btn nav-btn" title="Games"></button>
+                <button id="music-btn" class="icon-btn nav-btn" title="Music"></button>
                 <button id="settings-btn" class="icon-btn nav-btn" title="Settings"></button>
             </div>
             <div id="bookmarksbar"></div>
         </div>
 
-        <div id="content">
-            <aside id="games-sidebar" class="sidebar">
-                <div class="sidebar-head">
-                    <span>Games</span>
-                    <button id="games-sidebar-close" class="icon-btn sidebar-close" title="Close">×</button>
-                </div>
-                <div id="games-sidebar-list" class="sidebar-body"></div>
-            </aside>
-        </div>
+        <div id="content"></div>
 
         <div id="url-suggest"></div>
         <div id="site-panel"></div>
@@ -4336,11 +4260,35 @@ const UI_HTML = `<!DOCTYPE html>
         const ICON_RELOAD = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAA6ElEQVR4AezTUQqDQAwE0LYXELyB9z+UNxA8QctbjMjiZv3xqxamyWaSmZDSz+vmz2PQPfCfnGie5++yLDu8wX1EnPwM3RMZHoZhn13X9eUNxHeikaQGIUB0HMc3TNNUohoTaGiXctOAuGFCREv39oXb0m5oGhA3XYur4UDeQ9PAoO3FGk5Vo+6Jd2pwZUvnghCsY2pQN5+9e0s0DeI82XYZF8s0DeLHteGZkBrOItEbosfYNNDkhyRAyB+OqAhqejJxfGqggQATeYjK1Swgz9A1MMyE2BFquB4uGfREMv4xyK5TuNtP9AMAAP//Bkw8dgAAAAZJREFUAwDUanox3hqaEAAAAABJRU5ErkJggg==';
         const ICON_COLLAPSE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAABCUlEQVR4AexRSw6CMBCdoh5BTyEoJrpzod7ZnRcQMUAMegONFzARQ53XAKmkgIkaN5BOO515n2aw6Mdfa9A44HZE3xuR67r90XiyRSBvVM4Ab/0DCKZkbUiIKQI5aplG7dFoACEIsopNgg4qiGzU0ON67ao1gACEWMGmlE7ykawQyFFDDxjOK1elgeM4AwgwU4nfu7SMouiKSBJroZsAyzjjMhqAILq9DTMK8aPvn/muVhx7F90EWHBUs7QZDUSntyZJQ7wSL9fFc/6LCWMVJ29qp9GApLiRlF6VeM4vTBirOHlDO40GYbCbh8F+Znq5xlUpTIAFRxVKm9GghPno2ho0jq8d0f9H9AQAAP//N0iYjwAAAAZJREFUAwAnwXoxn+SR2AAAAABJRU5ErkJggg==';
         const GAMES_ICON = 'data:image/png;base64,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';
+        const MUSIC_ICON = 'data:image/svg+xml,' + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e8e8e8" ' +
+            'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+            '<circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/>' +
+            '<path d="M9 17.5V6l11-2v11.5"/>' +
+            '</svg>'
+        );
         const SITE_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAmQAAAJkAQMAAACF36//AAAABlBMVEUAAADi4uTELgoOAAAAAXRSTlMAQObYZgAABoRJREFUeNrsl0GOqzAQRLG88JIjcBQfzRyNo3AEpL9hgai/QeqANe6xu8eZifotE/wS4+oiGQzDMAzDMAzDMAzDMAzDMAzDMAzDMAyjQFoGAQ7DKx6bxBawDi+MOCW2iH14YQJmgQ047nLJVgPuW0tkb2ACcP+qkq2m+2oHAGurzAPAcrMJtjqSjexozsdjZwFtW6WNYXva9tZ8kI12DrTnA9gzW9vk47I99Nga8/FIRKRX6qB9nZntbL9twG00mo8hZmtx0TKq+VpcLBo2J7DR2uyVtd1Ga73Alq8NuNgEtk1uo7U0WqOqbdKwHZltb7fRWMbfZwMNvaYNGqeAWc9Gg+pUbV7HtqratlxfjVe2PeI16tgOGlNp99JoJcifCxRfyG202inY6FCDgo2OIYpsA4h/uDHLbPhsW+pkGz7MFvvYTrOVmPrYjk+zjX1s+6fZgtnM1tP2F6de13bq2lS7F++3xU6/3xZV26r6u3cT/PtQGVQPKA5DABTjO+JrZHGTBy4BioFDgVXVtkkCIg9cQIFDMyA4VW2QdKU8cBFgAxcgDy8Fjo+xXyhuTOBGPnjxpHZjAgc+eMBK4S0GbmKCd1kovKWIOC54l2Vn4wasV4T40GLmAgIc7jvBm667AhaycaFdAr7JwtgIuS2hjrWjDZVs/Wzuvba9n82jkqOfLbzXdrbY6B3Wxj+T568fsPW2vRCe+if8zLxXZTsoPWIbtU6qtcXSgrG2fGMpoL7WloqlU1u+qfjpUcFWSCNTl+W5DgJb3oeuzuaYG5Oqytcx8YxiW6EUmLr0TIEFgS2/2lXZAndmVeUbuKwnoW3hWqGqyAsXsDZuI6HGNnFH5gW2POpOYsuHWmLLyzAJbHntR5Ftzq6Q2IYftY0VkzWx14YK28j2jf/f3hnkOA4CUdSIBUuOwEVG8tHw0XwUH8FLL6L0bDJCcjR+/J5SSHrqLyN4ElRhA1XlYIumjM/pYEqbLlrgrOxI2wXahruBTXgvrLiLWoU34HJB490g08qFu9GsgNnhLDMzTTifZhxHEs71CceRhNuVgLSoXGBWWjZBuaqdkaZcSmdsrFyYJ422KNGYjWZ2AlWFdpNujVdocBAtK7SNaEmhLUQLZLIiXeXXftpdu7yHiT2YlvtpO9NSP21lWoB5SVoEpJ8mxFCMaOV6GUZwEJGmxciyKS310o4u2nXzoNGiKS300vYBNGiu0aYxtO2/oQ2wAg2lOs1pTnOa05wGtJe9s+ob0z7iXQ+0A0ncPHwE7Sbsos1pN6yvZEU+Zz30eloCmnauz3AS11JpSzdts6BJ7jvT7YrkcJVoTYrzMo3NEPHGTDFDRppihoI3jYoZKtOa2AhIE8wQ+fZYMENmmmCGwrfughlmpglmEKIVbIYo0NgMWYjysBkK0ZKSQ185OiaYQYjcsRmiQGMzJCHiyZu4IsR22aizTLuBSYUoNriIEGFnWhCi/+xwEWlBo3HWBDiRkq+RFBqOIys0bFsEWralcQaRQuPsJpXGmVc6jbPCmIYZa7bZdMMz/TgLcXyGpH325gEOMijrlTNy9fzeFbKFX5PJzFnWozLA9ez08ZnznNVvX3GgV0MUoImVGgOqSMwqXOyrb+wrg+yrluwrqqJM+9S6tneuB5zG0nbT+tP9Y2tj5SpgE9p9mjtopXv2Y3tYAu2IOMJH057LvAWt8fBNqmF/OHjueBDlrvr6L3yYPCgYIAsP/w49yzPhneqfme1aUL84HrB1f4GBlb963Hi1/XLF0K9qJHA3TRHcTVMAmihwXlEV3E3TbEor4G52Djf6i0YRHGTIl6DY4fbhX9CaTWkFnpVWDrcMo7H7TsNp8RNp9+/QgtOcNpDW9NNo8UW05YfR0otoq9MulF9E25z2rd3g/qNpd6AJe/KVMiP16kwLWus9G9H2No9I45PRCrm1Gm2BvF+NxhnOOm2yod0NaM+dG96CNpvQDkNaW+TFlJaB1rcZ3Axp7fWZ3o7WNljRxAqN/3a01hfWqUirOu2ibzV4kre+s0676FsM3s57oxnskRot67SLvsng9LG2XwzOp+vFf5gKehpXRJOyUdsPoeF1padZaitNV3jqDCsBhnqe89qsoiufaXMbua54Hlg50TXVJ1pbGrrKybsy+AcPdbv4Z2tRJxNG3T8u/vI7gH/wcjiZZfoXnRyiwEBB8za5XC6Xy+VyuVwul8vlcrlcLpfL5XK5XC6Xy/V3/QYJyJa4mNbwPQAAAABJRU5ErkJggg==';
 
         // Internal page, shown in the URL bar and accepted as a typed address.
         const SETTINGS_URL = 'knoiren://settings';
         const SETTINGS_RE = /^knoiren:\\/\\/settings\\/?$/i;
+
+        // Pages of their own, in other repositories. raw serves them as
+        // text/plain, so each is fetched and written into a frame rather than
+        // loaded -- the same thing the launchers do to start this UI.
+        const WEBPAGES = {
+            games: {
+                title: 'Games',
+                icon: GAMES_ICON,
+                src: 'https://raw.githubusercontent.com/ltorl/dancing-bunny/refs/heads/main/v2.html',
+            },
+            music: {
+                title: 'Music',
+                icon: MUSIC_ICON,
+                src: 'https://raw.githubusercontent.com/ltorl/openify-music/refs/heads/main/index.html',
+            },
+        };
+        const WEBPAGE_RE = new RegExp('^knoiren://(' + Object.keys(WEBPAGES).join('|') + ')/?$', 'i');
 
         const SETTINGS_ICON = 'data:image/svg+xml,' + encodeURIComponent(
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e8e8e8" ' +
@@ -4354,20 +4302,6 @@ const UI_HTML = `<!DOCTYPE html>
             '2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>' +
             '</svg>'
         );
-
-        const GAMES = [
-            ['3kh0 (Echo) Games', 'https://lite.3kh0.net/'],
-            ['RETRO GAMES', 'https://theooofficial.github.io/myRETROGAMES/'],
-            ['Bin Bash Games', 'https://bidoofery.github.io/gfiles/list.html'],
-            ['Native Games', 'https://bidoofery.github.io/nativegames/'],
-            ['GAMEBOY Advance Games', 'https://bidoofery.github.io/gam3b0y/'],
-            ['GBA Online Games', 'https://gba.js.org/'],
-            ['OutRed Games', 'https://outred.org/games.html'],
-            ['GBA Emulator Games', 'https://theclashman2.github.io/GBA-Emulator/'],
-            ['Unblocked Games World', 'https://sites.google.com/site/thegamecompilation/home?authuser=0'],
-            ['Now.gg Games', 'https://now.gg/'],
-            ['Dancing Bunny Games', 'https://ltorl.github.io/dancing-bunny/v2.html'],
-        ];
 
         function esc(s) {
             return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -4664,6 +4598,8 @@ const UI_HTML = `<!DOCTYPE html>
                 sframe: null,
                 newtabEl: null,
                 settingsEl: null,
+                pageEl: null,
+                pageKey: null,
                 hist: [],
                 histPtr: -1,
                 suppress: false,
@@ -5024,16 +4960,27 @@ const UI_HTML = `<!DOCTYPE html>
             tab.newtabEl = nt;
         }
 
+        // A fetched page is not in the tab's history, so another page taking the
+        // tab over ends it; the frame goes too, and with it the sound.
+        function dropWebpage(tab) {
+            if (!tab.pageEl) return;
+            tab.pageEl.remove();
+            tab.pageEl = null;
+            tab.pageKey = null;
+        }
+
         function showNewtab(tab) {
             if (tab.newtabEl) tab.newtabEl.style.display = '';
             if (tab.settingsEl) tab.settingsEl.style.display = 'none';
             if (tab.sframe) tab.sframe.frame.style.display = 'none';
+            dropWebpage(tab);
         }
 
         function showFrame(tab) {
             if (tab.newtabEl) tab.newtabEl.style.display = 'none';
             if (tab.settingsEl) tab.settingsEl.style.display = 'none';
             if (tab.sframe) tab.sframe.frame.style.display = '';
+            dropWebpage(tab);
         }
 
         // --- Settings page (knoiren://settings) ---------------------------------
@@ -5148,6 +5095,7 @@ const UI_HTML = `<!DOCTYPE html>
             if (tab.newtabEl) tab.newtabEl.style.display = 'none';
             if (tab.sframe) tab.sframe.frame.style.display = 'none';
             tab.settingsEl.style.display = '';
+            dropWebpage(tab);
 
             renderTabs();
             if (tab.id === activeId) syncToolbar();
@@ -5166,6 +5114,80 @@ const UI_HTML = `<!DOCTYPE html>
             showSettings(tab);
         }
 
+        // --- Fetched pages (knoiren://games, knoiren://music) ------------------
+
+        // One copy of each serves every tab showing it; a reload throws it away.
+        const pageHtml = {};
+
+        function webpageHtml(key) {
+            if (!pageHtml[key]) {
+                pageHtml[key] = fetch(WEBPAGES[key].src, { cache: 'no-store' }).then(r => {
+                    if (!r.ok) throw new Error('raw.githubusercontent.com answered ' + r.status);
+                    return r.text();
+                }).catch(err => {
+                    pageHtml[key] = null;
+                    throw err;
+                });
+            }
+            return pageHtml[key];
+        }
+
+        function loadWebpage(tab, key) {
+            // Writing over a document the page has already run in keeps that
+            // window's globals, and these pages declare their own, so each load
+            // gets a frame of its own.
+            const frame = document.createElement('iframe');
+            frame.className = 'webframe';
+            frame.setAttribute('allow', 'fullscreen; autoplay; clipboard-read; clipboard-write; encrypted-media; picture-in-picture; gamepad');
+            if (tab.pageEl) tab.pageEl.replaceWith(frame);
+            else tab.panel.appendChild(frame);
+            tab.pageEl = frame;
+            tab.pageKey = key;
+
+            const write = (text) => {
+                // The frame is still about:blank, so this document is ours to
+                // write into; the page then runs as if it had been served here.
+                const d = frame.contentDocument;
+                if (!d) return;
+                d.open();
+                d.write(text);
+                d.close();
+            };
+            webpageHtml(key).then(write, (err) => {
+                write('<!DOCTYPE html><body style="margin:0;padding:24px;background:#0b0c10;'
+                    + 'color:#c5c6c7;font:15px system-ui,sans-serif"></body>');
+                const d = frame.contentDocument;
+                if (d) d.body.textContent = 'Could not load ' + WEBPAGES[key].title + ': ' + ((err && err.message) || err);
+            });
+        }
+
+        function showWebpage(tab, key) {
+            if (!tab || !WEBPAGES[key]) return;
+            if (!tab.pageEl || tab.pageKey !== key) loadWebpage(tab, key);
+
+            tab.type = 'page';
+            tab.url = 'knoiren://' + key;
+            tab.title = WEBPAGES[key].title;
+            tab.favicon = WEBPAGES[key].icon;
+            if (tab.newtabEl) tab.newtabEl.style.display = 'none';
+            if (tab.settingsEl) tab.settingsEl.style.display = 'none';
+            if (tab.sframe) tab.sframe.frame.style.display = 'none';
+            renderTabs();
+            if (tab.id === activeId) syncToolbar();
+        }
+
+        function openWebpage(key) {
+            const existing = tabs.find(t => t.type === 'page' && t.pageKey === key);
+            if (existing) {
+                activateTab(existing.id);
+                return;
+            }
+            const cur = activeTab();
+            // Reuse an untouched new tab; otherwise open a fresh one.
+            const tab = (cur && cur.type === 'newtab' && !cur.hist.length) ? cur : (createTab() || cur);
+            showWebpage(tab, key);
+        }
+
         function ensureFrame(tab) {
             if (tab.sframe) return tab.sframe;
             const sframe = engine.createFrame();
@@ -5180,7 +5202,10 @@ const UI_HTML = `<!DOCTYPE html>
         }
 
         async function navigateTab(tab, query) {
-            if (SETTINGS_RE.test(String(query || '').trim())) return showSettings(tab);
+            const typed = String(query || '').trim();
+            if (SETTINGS_RE.test(typed)) return showSettings(tab);
+            const page = typed.match(WEBPAGE_RE);
+            if (page) return showWebpage(tab, page[1].toLowerCase());
             const url = normalizeUrl(query);
             if (!url) return;
 
@@ -5275,6 +5300,7 @@ const UI_HTML = `<!DOCTYPE html>
         function reloadTab(tab) {
             if (!tab) return;
             if (tab.type === 'settings') { renderSettings(tab); return; }
+            if (tab.type === 'page') { pageHtml[tab.pageKey] = null; loadWebpage(tab, tab.pageKey); return; }
             if (tab.histPtr >= 0 && tab.sframe) tab.sframe.go(tab.url);
         }
 
@@ -5993,9 +6019,12 @@ const UI_HTML = `<!DOCTYPE html>
         starBtn.appendChild(imgEl(STAR_OFF));
 
         const gamesBtn = document.getElementById('games-btn');
-        const gamesSidebar = document.getElementById('games-sidebar');
-        const gamesList = document.getElementById('games-sidebar-list');
         gamesBtn.appendChild(imgEl(GAMES_ICON));
+        gamesBtn.addEventListener('click', () => openWebpage('games'));
+
+        const musicBtn = document.getElementById('music-btn');
+        musicBtn.appendChild(imgEl(MUSIC_ICON));
+        musicBtn.addEventListener('click', () => openWebpage('music'));
 
         // Browsers without overflow: clip still let a page inside a tab scroll this
         // document (and #content) sideways; snap them back.
@@ -6005,26 +6034,6 @@ const UI_HTML = `<!DOCTYPE html>
                 if (el.scrollLeft || el.scrollTop) { el.scrollLeft = 0; el.scrollTop = 0; }
             });
         }
-
-        function setGamesSidebar(open) {
-            gamesSidebar.classList.toggle('open', open);
-            gamesBtn.classList.toggle('active', open);
-        }
-
-        GAMES.forEach(([label, url]) => {
-            const link = document.createElement('div');
-            link.className = 'gs-link';
-            link.textContent = label;
-            link.addEventListener('click', () => {
-                const tab = tabs.find(t => t.id === activeId);
-                if (tab) navigateTab(tab, url);
-                setGamesSidebar(false);
-            });
-            gamesList.appendChild(link);
-        });
-
-        gamesBtn.addEventListener('click', () => setGamesSidebar(!gamesSidebar.classList.contains('open')));
-        document.getElementById('games-sidebar-close').addEventListener('click', () => setGamesSidebar(false));
 
         const settingsBtn = document.getElementById('settings-btn');
         settingsBtn.appendChild(imgEl(SETTINGS_ICON));
