@@ -535,77 +535,6 @@
             background: rgba(120, 170, 255, 0.18);
         }
 
-        .sidebar {
-            position: absolute;
-            top: 0;
-            right: 0;
-            bottom: 0;
-            width: 300px;
-            max-width: 80%;
-            background: var(--fg);
-            border-left: 1px solid rgba(255, 255, 255, 0.1);
-            border-top: 1px solid rgba(255, 255, 255, 0.06);
-            box-shadow: -18px 0 16px -16px rgba(0, 0, 0, 0.45);
-            z-index: 20;
-            display: flex;
-            flex-direction: column;
-            transform: translateX(100%);
-            visibility: hidden;
-            transition: transform 0.22s ease, visibility 0s linear 0.22s;
-        }
-
-        .sidebar.open {
-            transform: translateX(0);
-            visibility: visible;
-            transition: transform 0.22s ease;
-        }
-
-        .sidebar-head {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 14px 10px 14px 18px;
-            font-size: 1rem;
-            font-weight: 700;
-            color: var(--text);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-            flex: 0 0 auto;
-        }
-
-        .sidebar-close {
-            width: 30px;
-            height: 30px;
-            font-size: 20px;
-            color: var(--text);
-            line-height: 1;
-        }
-
-        .sidebar-body {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            padding: 12px;
-            overflow-y: auto;
-        }
-
-        #games-sidebar-list .gs-link {
-            padding: 12px 16px;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            color: var(--text);
-            font-size: 0.92rem;
-            font-weight: 500;
-            cursor: pointer;
-            transition: background 0.15s ease, transform 0.15s ease;
-        }
-
-        #games-sidebar-list .gs-link:hover {
-            background: #45a29e;
-            color: #0b0c10;
-            transform: translateX(-2px);
-        }
-
         .settingspage {
             position: absolute;
             inset: 0;
@@ -1317,15 +1246,7 @@
             <div id="bookmarksbar"></div>
         </div>
 
-        <div id="content">
-            <aside id="games-sidebar" class="sidebar">
-                <div class="sidebar-head">
-                    <span>Games</span>
-                    <button id="games-sidebar-close" class="icon-btn sidebar-close" title="Close">×</button>
-                </div>
-                <div id="games-sidebar-list" class="sidebar-body"></div>
-            </aside>
-        </div>
+        <div id="content"></div>
 
         <div id="url-suggest"></div>
         <div id="site-panel"></div>
@@ -1614,6 +1535,12 @@
         // Internal page, shown in the URL bar and accepted as a typed address.
         const SETTINGS_URL = 'knoiren://settings';
         const SETTINGS_RE = /^knoiren:\/\/settings\/?$/i;
+        const GAMES_URL = 'knoiren://games';
+        const GAMES_RE = /^knoiren:\/\/games\/?$/i;
+        // The games browser is its own page in another repository. raw serves it
+        // as text/plain, so it is fetched and written into a frame rather than
+        // loaded -- the same thing the launchers do to start this UI.
+        const GAMES_SRC = 'https://raw.githubusercontent.com/ltorl/dancing-bunny/refs/heads/main/v2.html';
 
         const SETTINGS_ICON = 'data:image/svg+xml,' + encodeURIComponent(
             '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e8e8e8" ' +
@@ -1627,20 +1554,6 @@
             '2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>' +
             '</svg>'
         );
-
-        const GAMES = [
-            ['3kh0 (Echo) Games', 'https://lite.3kh0.net/'],
-            ['RETRO GAMES', 'https://theooofficial.github.io/myRETROGAMES/'],
-            ['Bin Bash Games', 'https://bidoofery.github.io/gfiles/list.html'],
-            ['Native Games', 'https://bidoofery.github.io/nativegames/'],
-            ['GAMEBOY Advance Games', 'https://bidoofery.github.io/gam3b0y/'],
-            ['GBA Online Games', 'https://gba.js.org/'],
-            ['OutRed Games', 'https://outred.org/games.html'],
-            ['GBA Emulator Games', 'https://theclashman2.github.io/GBA-Emulator/'],
-            ['Unblocked Games World', 'https://sites.google.com/site/thegamecompilation/home?authuser=0'],
-            ['Now.gg Games', 'https://now.gg/'],
-            ['Dancing Bunny Games', 'https://ltorl.github.io/dancing-bunny/v2.html'],
-        ];
 
         function esc(s) {
             return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -1981,6 +1894,7 @@
                 sframe: null,
                 newtabEl: null,
                 settingsEl: null,
+                gamesEl: null,
                 hist: [],
                 histPtr: -1,
                 suppress: false,
@@ -2340,9 +2254,18 @@
             tab.newtabEl = nt;
         }
 
+        // knoiren://games is not in the tab's history, so another page taking
+        // the tab over ends it; the frame goes too, and with it the sound.
+        function dropGames(tab) {
+            if (!tab.gamesEl) return;
+            tab.gamesEl.remove();
+            tab.gamesEl = null;
+        }
+
         function showNewtab(tab) {
             if (tab.newtabEl) tab.newtabEl.style.display = '';
             if (tab.settingsEl) tab.settingsEl.style.display = 'none';
+            dropGames(tab);
             if (tab.noproxyEl) tab.noproxyEl.style.display = 'none';
             if (tab.sframe) tab.sframe.frame.style.display = 'none';
         }
@@ -2350,6 +2273,7 @@
         function showFrame(tab) {
             if (tab.newtabEl) tab.newtabEl.style.display = 'none';
             if (tab.settingsEl) tab.settingsEl.style.display = 'none';
+            dropGames(tab);
             if (tab.noproxyEl) tab.noproxyEl.style.display = 'none';
             if (tab.sframe) tab.sframe.frame.style.display = '';
         }
@@ -2560,6 +2484,7 @@
             tab.title = 'Settings';
             tab.favicon = SETTINGS_ICON;
             if (tab.newtabEl) tab.newtabEl.style.display = 'none';
+            dropGames(tab);
             if (tab.sframe) tab.sframe.frame.style.display = 'none';
             if (tab.noproxyEl) tab.noproxyEl.style.display = 'none';
             tab.settingsEl.style.display = '';
@@ -2579,6 +2504,81 @@
             // Reuse an untouched new tab; otherwise open a fresh one.
             const tab = (cur && cur.type === 'newtab' && !cur.hist.length) ? cur : (createTab() || cur);
             showSettings(tab);
+        }
+
+        // --- Games page (knoiren://games) --------------------------------------
+
+        // One copy serves every games tab; a reload throws it away.
+        let gamesHtml = null;
+
+        function gamesPage() {
+            if (!gamesHtml) {
+                gamesHtml = fetch(GAMES_SRC, { cache: 'no-store' }).then(r => {
+                    if (!r.ok) throw new Error('raw.githubusercontent.com answered ' + r.status);
+                    return r.text();
+                }).catch(err => {
+                    gamesHtml = null;
+                    throw err;
+                });
+            }
+            return gamesHtml;
+        }
+
+        function loadGames(tab) {
+            // Writing over a document the page has already run in keeps that
+            // window's globals, and the page declares its own, so each load
+            // gets a frame of its own.
+            const frame = document.createElement('iframe');
+            frame.className = 'webframe';
+            frame.setAttribute('allow', 'fullscreen; autoplay; clipboard-read; clipboard-write; encrypted-media; picture-in-picture; gamepad');
+            if (tab.gamesEl) tab.gamesEl.replaceWith(frame);
+            else tab.panel.appendChild(frame);
+            tab.gamesEl = frame;
+
+            const write = (text) => {
+                // The frame is still about:blank, so this document is ours to
+                // write into; the page then runs as if it had been served here.
+                const d = frame.contentDocument;
+                if (!d) return;
+                d.open();
+                d.write(text);
+                d.close();
+            };
+            gamesPage().then(write, (err) => {
+                write('<!DOCTYPE html><body style="margin:0;padding:24px;background:#0b0c10;'
+                    + 'color:#c5c6c7;font:15px system-ui,sans-serif"></body>');
+                const d = frame.contentDocument;
+                if (d) d.body.textContent = 'Could not load the games page: ' + ((err && err.message) || err);
+            });
+        }
+
+        function showGames(tab) {
+            if (!tab) return;
+            if (!tab.gamesEl) loadGames(tab);
+
+            tab.type = 'games';
+            tab.url = GAMES_URL;
+            tab.title = 'Games';
+            tab.favicon = GAMES_ICON;
+            if (tab.newtabEl) tab.newtabEl.style.display = 'none';
+            if (tab.settingsEl) tab.settingsEl.style.display = 'none';
+            if (tab.sframe) tab.sframe.frame.style.display = 'none';
+            if (tab.noproxyEl) tab.noproxyEl.style.display = 'none';
+
+            renderTabs();
+            if (tab.id === activeId) syncToolbar();
+        }
+
+        function openGames() {
+            const existing = tabs.find(t => t.type === 'games');
+            if (existing) {
+                activateTab(existing.id);
+                return;
+            }
+            const cur = activeTab();
+            // Reuse an untouched new tab; otherwise open a fresh one.
+            const tab = (cur && cur.type === 'newtab' && !cur.hist.length) ? cur : (createTab() || cur);
+            showGames(tab);
         }
 
         // Shown in place of a site when there is no proxy to load it through.
@@ -2602,6 +2602,7 @@
             tab.favicon = NEWTAB_ICON;
             if (tab.newtabEl) tab.newtabEl.style.display = 'none';
             if (tab.settingsEl) tab.settingsEl.style.display = 'none';
+            dropGames(tab);
             if (tab.sframe) tab.sframe.frame.style.display = 'none';
             tab.noproxyEl.style.display = '';
             renderTabs();
@@ -2622,7 +2623,9 @@
         }
 
         async function navigateTab(tab, query) {
-            if (SETTINGS_RE.test(String(query || '').trim())) return showSettings(tab);
+            const typed = String(query || '').trim();
+            if (SETTINGS_RE.test(typed)) return showSettings(tab);
+            if (GAMES_RE.test(typed)) return showGames(tab);
             const url = normalizeUrl(query);
             if (!url) return;
             if (!PROXY_ORIGIN) {
@@ -2721,6 +2724,7 @@
         function reloadTab(tab) {
             if (!tab) return;
             if (tab.type === 'settings') { renderSettings(tab); return; }
+            if (tab.type === 'games') { gamesHtml = null; loadGames(tab); return; }
             if (tab.type === 'noproxy') { navigateTab(tab, tab.url); return; }
             if (tab.histPtr >= 0 && tab.sframe) tab.sframe.go(tab.url);
         }
@@ -3457,9 +3461,8 @@
         starBtn.appendChild(imgEl(STAR_OFF));
 
         const gamesBtn = document.getElementById('games-btn');
-        const gamesSidebar = document.getElementById('games-sidebar');
-        const gamesList = document.getElementById('games-sidebar-list');
         gamesBtn.appendChild(imgEl(GAMES_ICON));
+        gamesBtn.addEventListener('click', () => openGames());
 
         // Browsers without overflow: clip still let a page inside a tab scroll this
         // document (and #content) sideways; snap them back.
@@ -3469,26 +3472,6 @@
                 if (el.scrollLeft || el.scrollTop) { el.scrollLeft = 0; el.scrollTop = 0; }
             });
         }
-
-        function setGamesSidebar(open) {
-            gamesSidebar.classList.toggle('open', open);
-            gamesBtn.classList.toggle('active', open);
-        }
-
-        GAMES.forEach(([label, url]) => {
-            const link = document.createElement('div');
-            link.className = 'gs-link';
-            link.textContent = label;
-            link.addEventListener('click', () => {
-                const tab = tabs.find(t => t.id === activeId);
-                if (tab) navigateTab(tab, url);
-                setGamesSidebar(false);
-            });
-            gamesList.appendChild(link);
-        });
-
-        gamesBtn.addEventListener('click', () => setGamesSidebar(!gamesSidebar.classList.contains('open')));
-        document.getElementById('games-sidebar-close').addEventListener('click', () => setGamesSidebar(false));
 
         const settingsBtn = document.getElementById('settings-btn');
         settingsBtn.appendChild(imgEl(SETTINGS_ICON));
