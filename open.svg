@@ -2,22 +2,7 @@
 
 
 <button
-    onclick=
-        "
-            const n = window.open('about:blank', '_blank');
-            if (n) {
-                fetch('./index.html')
-                    .then(response => response.text())
-                    .then(text => {
-                        const d = n.document;
-                        d.open();
-                        d.write(text);
-                        d.close();
-
-                        window.close();
-                    });
-            }
-        "
+    onclick="launch()"
     style=
         "
             width: 100%; height: 100%; font-size: 16pt; font-family: 'Comic Sans MS', sans-serif;
@@ -29,10 +14,46 @@
 <script><![CDATA[
     // This file does double duty, because on a host that serves .html as
     // text/plain it is the only document here that runs at all. Clicked, it
-    // writes index.html into a blank window. Loaded as open.svg?px=register in
-    // a hidden frame of that window, it installs the service worker, which the
+    // writes v2.html into a blank window. Loaded as open.svg?px=register in a
+    // hidden frame of that window, it installs the service worker, which the
     // written page cannot do itself -- its own container throws on every call
     // -- and reports back. The worker then answers that window's frames.
+
+    // The UI comes from the repository rather than from the host this file was
+    // served by: a CDN may hand out a week-old copy of v2.html long after it
+    // changed, and raw.githubusercontent never does. The copy next to this file
+    // is the fallback, for a network that blocks raw.
+    var RAW = 'https://raw.githubusercontent.com/ltorl/knoiren-browser/main/v2.html';
+
+    function ui() {
+        return fetch(RAW, { cache: 'no-store' }).then(function (r) {
+            if (!r.ok) throw new Error('raw.githubusercontent.com answered ' + r.status);
+            return r.text();
+        }).catch(function () {
+            return fetch('./v2.html').then(function (r) {
+                if (!r.ok) throw new Error('./v2.html answered ' + r.status);
+                return r.text();
+            });
+        });
+    }
+
+    function launch() {
+        // The window is opened first, while the click is still the reason
+        // anything is happening; a popup asked for after the fetch is blocked.
+        var n = window.open('about:blank', '_blank');
+        if (!n) return;
+        ui().then(function (text) {
+            var d = n.document;
+            d.open();
+            d.write(text);
+            d.close();
+
+            window.close();
+        }, function (err) {
+            n.document.body.textContent = 'Could not load the browser: ' + ((err && err.message) || err);
+        });
+    }
+
     document.addEventListener("DOMContentLoaded", () => {
         if (!/(?:^|[?&])px=register(?:&|$)/.test(location.search)) {
             document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.click();

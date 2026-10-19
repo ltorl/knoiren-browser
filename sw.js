@@ -2,7 +2,7 @@
 //
 // A port of proxy.js to a service worker. Everything the Node version did with
 // sockets is done with libcurl.js over a Wisp relay, so the proxy needs no
-// server of its own: index.html installs this file and it answers every
+// server of its own: open.svg installs this file and it answers every
 // request under its own directory.
 //
 // URLs keep proxy.js's shape: <this directory>__px/<absolute upstream URL>.
@@ -27,10 +27,10 @@ const UI_ORIGINS = ['*'];
 const UPSTREAM_TIMEOUT_MS = 100000;
 const MAX_BUFFERED_BYTES = 16 * 1024 * 1024;
 const ME = self.location.origin;
-// Paths the static host serves -- this worker, its page and the opener that
-// writes the page into a blank window -- never proxied.
+// Paths the static host serves -- this worker, the UI and the launchers that
+// write it into a blank window -- never proxied.
 const HOME_PATH = new RegExp('^' + BASE.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  + '(?:index\\.html|200\\.html|404\\.html|sw\\.js|open\\.svg)?$');
+  + '(?:index\\.html|v2\\.html|sw\\.js|open\\.svg)?$');
 const STATE_CACHE = '__px-state';
 const STATE_KEY = ME + BASE + '__px_state';
 
