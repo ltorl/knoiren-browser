@@ -1294,8 +1294,11 @@
     <script type="module">
         // Static build: there is no server to fill in the proxy's address, so it is
         // set in Settings and kept in localStorage. Opening this page with
-        // ?proxy=https://proxy.example.com presets it.
+        // ?proxy=https://proxy.example.com presets it. The address can include a
+        // path, since a static Peekaboom may be deployed in a subdirectory.
         const PROXY_KEY = 'knoiren_proxy_origin';
+        // Used until Settings says otherwise; clearing the field brings it back.
+        const DEFAULT_PROXY_ORIGIN = 'https://peekaboom-proxy.github.io';
         const PX_PREFIX = '/__px/';
 
         // "proxy.example.com", "localhost:8787" or a full URL -> its origin, or '' if invalid.
@@ -1308,14 +1311,24 @@
             }
             try {
                 const u = new URL(s);
-                return /^https?:$/.test(u.protocol) && u.hostname ? u.origin : '';
+                if (!/^https?:$/.test(u.protocol) || !u.hostname) return '';
+                return u.origin + u.pathname.replace(/\/+$/, '');
             } catch (e) {
                 return '';
             }
         }
 
-        let PROXY_ORIGIN = '';
-        try { PROXY_ORIGIN = parseProxyOrigin(localStorage.getItem(PROXY_KEY)); } catch (e) { }
+        // The proxy's own origin, for postMessage and for checking who a message
+        // came from: those take an origin, never a path.
+        function proxySite() {
+            try { return new URL(PROXY_ORIGIN).origin; } catch (e) { return ''; }
+        }
+
+        let PROXY_ORIGIN = parseProxyOrigin(DEFAULT_PROXY_ORIGIN);
+        try {
+            const stored = localStorage.getItem(PROXY_KEY);
+            if (stored !== null) PROXY_ORIGIN = parseProxyOrigin(stored);
+        } catch (e) { }
         {
             const preset = parseProxyOrigin(new URLSearchParams(location.search).get('proxy'));
             if (preset) {
@@ -1426,7 +1439,7 @@
         }
 
         window.addEventListener('message', (e) => {
-            if (e.origin !== PROXY_ORIGIN || !e.data || typeof e.data.__px !== 'string') return;
+            if (e.origin !== proxySite() || !e.data || typeof e.data.__px !== 'string') return;
             // A page talking to us is proof the proxy works, whatever the probe said.
             if (!engineReady) markProxyReady();
             const tab = tabs.find(t => t.sframe && t.sframe.frame.contentWindow === e.source);
@@ -1434,13 +1447,13 @@
             const d = e.data;
             if (d.__px === 'nav') {
                 // Tell the page we handle its new windows as tabs.
-                e.source.postMessage({ __px: 'host' }, PROXY_ORIGIN);
+                e.source.postMessage({ __px: 'host' }, proxySite());
                 // A new document starts unmuted, so a muted tab says it again.
-                if (tab.muted) e.source.postMessage({ __px: 'mute', muted: true }, PROXY_ORIGIN);
+                if (tab.muted) e.source.postMessage({ __px: 'mute', muted: true }, proxySite());
                 setTabAudible(tab, !!d.audible);
                 tab.sframe.emit('urlchange', { url: String(d.url || ''), title: String(d.title || ''), icon: String(d.icon || '') });
             } else if (d.__px === 'hello') {
-                if (tab.muted) e.source.postMessage({ __px: 'mute', muted: true }, PROXY_ORIGIN);
+                if (tab.muted) e.source.postMessage({ __px: 'mute', muted: true }, proxySite());
             } else if (d.__px === 'audio') {
                 setTabAudible(tab, !!d.audible);
             } else if (d.__px === 'open') {
@@ -1995,7 +2008,7 @@
         function setTabMuted(tab, muted) {
             tab.muted = !!muted;
             const w = tab.sframe && tab.sframe.frame.contentWindow;
-            if (w) { try { w.postMessage({ __px: 'mute', muted: tab.muted }, PROXY_ORIGIN); } catch (e) { } }
+            if (w) { try { w.postMessage({ __px: 'mute', muted: tab.muted }, proxySite()); } catch (e) { } }
             updateTabEl(tab);
         }
 
@@ -2172,7 +2185,7 @@
                 if (location.protocol === 'https:' && PROXY_ORIGIN.startsWith('http:') && !local) {
                     note('This page is served over https, so the browser will block an http proxy. Use an https address.', 'set-warn');
                 }
-                if (PROXY_ORIGIN === location.origin) {
+                if (proxySite() === location.origin) {
                     note('The proxy shares this page’s origin, so proxied sites could read your tabs and bookmarks. ' +
                         'Host this page somewhere else.', 'set-warn');
                 }
@@ -2483,7 +2496,7 @@
             if (!tab || !tab.sframe || !/^https?:/i.test(tab.url || '')) return;
             let code = String(rawUrl).replace(/^\s*javascript:/i, '');
             try { code = decodeURIComponent(code); } catch (e) { }
-            tab.sframe.frame.contentWindow.postMessage({ __px: 'run', code }, PROXY_ORIGIN);
+            tab.sframe.frame.contentWindow.postMessage({ __px: 'run', code }, proxySite());
         }
 
         function findBookmarkByUrl(url, list = bookmarks) {
