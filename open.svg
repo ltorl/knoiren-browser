@@ -1,7 +1,6 @@
 <svg xmlns="http://www.w3.org/1999/xhtml" style="height: 100%;">
 
-<title>404 not found</title>
-    
+
 <button
     onclick="launch()"
     style=
@@ -82,7 +81,10 @@
                 clearTimeout(t);
                 done(!!e.data.ok);
             }, { once: true });
-            worker.postMessage({ __px: 'config' });
+            // The relay Settings picked, if the page sent one along; the
+            // worker keeps the one it already has otherwise.
+            const wisp = new URLSearchParams(location.search).get('wisp');
+            worker.postMessage(wisp ? { __px: 'config', wisp } : { __px: 'config' });
         })).then(
             ok => tell(ok, ok ? '' : 'The worker is running but could not load libcurl.js.'),
             e => tell(false, 'Could not start sw.js: ' + ((e && e.message) || e))

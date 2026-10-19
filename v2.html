@@ -719,6 +719,24 @@
             gap: 8px;
         }
 
+        .set-input {
+            flex: 1 1 auto;
+            min-width: 0;
+            padding: 10px 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text);
+            font: inherit;
+            font-size: 0.88rem;
+        }
+
+        .set-input:focus {
+            outline: none;
+            border-color: #45a29e;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
         .set-btn {
             flex: 0 0 auto;
             padding: 10px 18px;
@@ -1335,8 +1353,13 @@
         // about:blank window, where location says nothing about where the page
         // came from while its base URL still does.
         (function () {
-            // The relay is fixed here, as it is in sw.js.
-            var WISP = 'wss://anura.pro/';
+            // libcurl.js dials its sockets through a Wisp relay. sw.js has the
+            // same default and remembers whatever it was last given, but the
+            // page hands its own copy over on every start, so Settings decides.
+            var WISP_DEFAULT = 'wss://anura.pro/';
+            var WKEY = '__px_wisp';
+            var WISP = WISP_DEFAULT;
+            try { WISP = localStorage.getItem(WKEY) || WISP_DEFAULT; } catch (e) { }
             var BKEY = '__px_base';
             var sw = navigator.serviceWorker;
 
@@ -1396,6 +1419,10 @@
                 // service worker container of its own -- see PX.ready.
                 written: written,
                 home: home,
+                // The Wisp relay, and the way Settings points it elsewhere.
+                wisp: WISP,
+                wispDefault: WISP_DEFAULT,
+                setWisp: setWisp,
                 ready: null
             };
             if (home) { try { localStorage.setItem(BKEY, BASE); } catch (e) { } }
@@ -1440,7 +1467,7 @@
             // document that was written into a blank window and so has no
             // usable container of its own. open.svg wrote this page, so it is
             // there, and a host that serves .html as text/plain still runs it.
-            function install() {
+            function install(wisp) {
                 return new Promise(function (resolve) {
                     var frame = document.createElement('iframe');
                     frame.setAttribute('aria-hidden', 'true');
@@ -1463,8 +1490,39 @@
                         finish({ ok: false, error: 'No answer from ' + BASE + 'open.svg, which installs ' + BASE + 'sw.js.' });
                     }, 12000);
                     window.addEventListener('message', on);
-                    frame.src = BASE + 'open.svg?px=register';
+                    frame.src = BASE + 'open.svg?px=register'
+                        + (wisp ? '&wisp=' + encodeURIComponent(wisp) : '');
                     (document.body || document.documentElement).appendChild(frame);
+                });
+            }
+
+            // Hand the worker a relay once it is already running, for Settings.
+            // A written document may not touch its own container, so the message
+            // goes the way the registration went, through a frame of open.svg.
+            function setWisp(wisp) {
+                WISP = wisp;
+                PX.wisp = wisp;
+                try {
+                    if (wisp === WISP_DEFAULT) localStorage.removeItem(WKEY);
+                    else localStorage.setItem(WKEY, wisp);
+                } catch (e) { }
+                if (!sw || !HERE) {
+                    return Promise.resolve({ ok: false, error: 'There is no proxy here to tell.' });
+                }
+                if (written) return install(wisp);
+                return sw.getRegistration(BASE).then(function (reg) {
+                    var worker = sw.controller || (reg && reg.active);
+                    if (!worker) throw new Error('the worker is not running');
+                    return ask(worker, { __px: 'config', wisp: wisp });
+                }).then(function (reply) {
+                    // No reply means the page is not controlled, which says
+                    // nothing about the worker; a reply that says so does.
+                    if (reply && !reply.ok) {
+                        return { ok: false, error: 'The worker is running but could not load libcurl.js.' };
+                    }
+                    return { ok: true };
+                }).catch(function (err) {
+                    return { ok: false, error: 'Could not reach ' + BASE + 'sw.js: ' + ((err && err.message) || err) };
                 });
             }
 
@@ -1484,7 +1542,7 @@
                     // Nothing else can install it: there is no copy of this
                     // file under the host's 404 page to catch a proxied request
                     // and retry, so the worker has to be there before any frame.
-                    return install();
+                    return install(WISP);
                 }
                 return sw.register(BASE + 'sw.js', { scope: BASE }).then(active).then(function (reg) {
                     return ask(sw.controller || reg.active, { __px: 'config', wisp: WISP });
@@ -1529,6 +1587,17 @@
         // came from: those take an origin, never a path.
         function proxySite() {
             try { return new URL(PROXY_ORIGIN).origin; } catch (e) { return ''; }
+        }
+
+        // A proxied page replaces its own window.postMessage, and calling that
+        // copy -- which is what w.postMessage() reaches -- makes the browser
+        // name the page itself as the sender. The page only listens to messages
+        // from its parent, so it drops them. Our own native copy, called on the
+        // frame, keeps this window as the source.
+        const NATIVE_POST = window.postMessage;
+        function sendToFrame(w, msg) {
+            if (!w) return;
+            try { NATIVE_POST.call(w, msg, proxySite()); } catch (e) { }
         }
 
         const NO_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAACVBMVEWVmqCRl5yYnqR1edwxAAAAA3RSTlMHiviNM9i0AAAA9ElEQVR42u2XMQ4DIQwEPfz/0alC47PHREJpbssTO7KBW5l41QjWFhy7VxKndkGY3RFud4T7zwl5fSaO/VTYkZ+uLffT97XM7/va7j/hAOZ+GJ6mtK9NIH4tYYPFbzudPk5L8AaypAAHYAXEmpcgN1ABCEB7oD9aB1SXa8t60KD4PwABeN4+J61UCEUJhAG2KAJzKWArnWpECECS5xiwJgDGwVFcfbwEiZ/fADEEEKEBigE0QBXgCe6A8wDtV/oPy1ePC9HMoE8GzwxkiFAC4s9ygA1JAsDHtA7Aqv1OwBLiaNS9Omw7gYsPDkdw89Hlz75XtT46qA3Em0wn6wAAAABJRU5ErkJggg==';
@@ -1647,13 +1716,13 @@
             const d = e.data;
             if (d.__px === 'nav') {
                 // Tell the page we handle its new windows as tabs.
-                e.source.postMessage({ __px: 'host' }, proxySite());
+                sendToFrame(e.source, { __px: 'host' });
                 // A new document starts unmuted, so a muted tab says it again.
-                if (tab.muted) e.source.postMessage({ __px: 'mute', muted: true }, proxySite());
+                if (tab.muted) sendToFrame(e.source, { __px: 'mute', muted: true });
                 setTabAudible(tab, !!d.audible);
                 tab.sframe.emit('urlchange', { url: String(d.url || ''), title: String(d.title || ''), icon: String(d.icon || '') });
             } else if (d.__px === 'hello') {
-                if (tab.muted) e.source.postMessage({ __px: 'mute', muted: true }, proxySite());
+                if (tab.muted) sendToFrame(e.source, { __px: 'mute', muted: true });
             } else if (d.__px === 'audio') {
                 setTabAudible(tab, !!d.audible);
             } else if (d.__px === 'open') {
@@ -2185,8 +2254,7 @@
         // Muting is kept per tab and sent to the page again after every navigation.
         function setTabMuted(tab, muted) {
             tab.muted = !!muted;
-            const w = tab.sframe && tab.sframe.frame.contentWindow;
-            if (w) { try { w.postMessage({ __px: 'mute', muted: tab.muted }, proxySite()); } catch (e) { } }
+            sendToFrame(tab.sframe && tab.sframe.frame.contentWindow, { __px: 'mute', muted: tab.muted });
             updateTabEl(tab);
         }
 
@@ -2328,6 +2396,75 @@
             }
         }
 
+        // The relay libcurl.js dials for every socket. One that has gone away is
+        // the usual reason nothing loads at all, so it can be pointed elsewhere
+        // here. The draft is kept across redraws, which settings does on its own.
+        let wispDraft = null;
+        let wispNote = '';
+
+        function buildWispSection(inner) {
+            if (!PROXY_ORIGIN) return;
+            inner.appendChild(settingsSection('Wisp relay'));
+
+            const row = document.createElement('div');
+            row.className = 'set-field';
+
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'set-input';
+            input.spellcheck = false;
+            input.setAttribute('autocapitalize', 'off');
+            input.placeholder = PX.wispDefault;
+            input.value = wispDraft === null ? (PX.wisp || '') : wispDraft;
+            input.addEventListener('input', () => { wispDraft = input.value; });
+
+            const save = document.createElement('button');
+            save.type = 'button';
+            save.className = 'set-btn';
+            save.textContent = 'Save';
+
+            const apply = async (value) => {
+                value = (value || '').trim() || PX.wispDefault;
+                let fine = false;
+                try { fine = /^wss?:$/.test(new URL(value).protocol); } catch (e) { }
+                if (!fine) {
+                    wispDraft = value;
+                    wispNote = 'A relay address looks like wss://host/, and ' + value + ' is not one.';
+                    renderAllSettings();
+                    return;
+                }
+                save.disabled = true;
+                wispDraft = value;
+                wispNote = 'Saving…';
+                const r = await PX.setWisp(value);
+                wispDraft = null;
+                wispNote = r.ok
+                    ? 'Saved. Sites go out through ' + value + ' from now on; a tab already open keeps the sockets it has until it is reloaded.'
+                    : 'Saved for next time, but the proxy did not take it: ' + (r.error || '');
+                renderAllSettings();
+            };
+            save.addEventListener('click', () => apply(input.value));
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') { e.preventDefault(); apply(input.value); }
+            });
+
+            const reset = document.createElement('button');
+            reset.type = 'button';
+            reset.className = 'set-btn';
+            reset.textContent = 'Default';
+            reset.disabled = (wispDraft === null ? PX.wisp : wispDraft) === PX.wispDefault;
+            reset.addEventListener('click', () => apply(PX.wispDefault));
+
+            row.append(input, save, reset);
+            inner.appendChild(row);
+
+            const note = document.createElement('div');
+            note.className = 'set-note';
+            note.textContent = wispNote
+                || 'Every connection the proxy makes is tunnelled through this relay. The default is ' + PX.wispDefault + '.';
+            inner.appendChild(note);
+        }
+
         // Re-runs the favicon refresh at the end of this file. The icon can be
         // left stale by a browser that fetched it before the page was written.
         function buildFaviconSection(inner) {
@@ -2394,6 +2531,7 @@
             inner.appendChild(title);
 
             buildProxySection(inner);
+            buildWispSection(inner);
             buildWindowSection(inner);
             buildFaviconSection(inner);
         }
@@ -2640,7 +2778,7 @@
             if (!tab || !tab.sframe || !/^https?:/i.test(tab.url || '')) return;
             let code = String(rawUrl).replace(/^\s*javascript:/i, '');
             try { code = decodeURIComponent(code); } catch (e) { }
-            tab.sframe.frame.contentWindow.postMessage({ __px: 'run', code }, proxySite());
+            sendToFrame(tab.sframe.frame.contentWindow, { __px: 'run', code });
         }
 
         function findBookmarkByUrl(url, list = bookmarks) {
