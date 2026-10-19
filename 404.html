@@ -1437,19 +1437,55 @@
                 });
             }
 
+            // Install the worker from a hidden frame at a real URL, for a
+            // document that was written into a blank window and so has no
+            // usable container of its own. open.svg wrote this page, so it is
+            // there, and a host that serves .html as text/plain still runs it.
+            function install() {
+                return new Promise(function (resolve) {
+                    var frame = document.createElement('iframe');
+                    frame.setAttribute('aria-hidden', 'true');
+                    frame.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;border:0;visibility:hidden';
+                    var done = false;
+                    function finish(r) {
+                        if (done) return;
+                        done = true;
+                        clearTimeout(timer);
+                        window.removeEventListener('message', on);
+                        if (frame.parentNode) frame.parentNode.removeChild(frame);
+                        resolve(r);
+                    }
+                    function on(e) {
+                        if (e.source !== frame.contentWindow) return;
+                        if (!e.data || e.data.__px !== 'registered') return;
+                        finish(e.data.ok ? { ok: true } : { ok: false, error: e.data.error || '' });
+                    }
+                    var timer = setTimeout(function () {
+                        finish({ ok: false, error: 'No answer from ' + BASE + 'open.svg, which installs ' + BASE + 'sw.js.' });
+                    }, 12000);
+                    window.addEventListener('message', on);
+                    frame.src = BASE + 'open.svg?px=register';
+                    (document.body || document.documentElement).appendChild(frame);
+                });
+            }
+
             PX.ready = (function () {
                 if (!sw) return Promise.resolve({ ok: false, error: 'This browser has no service workers.' });
+                if (!HERE) {
+                    return Promise.resolve({ ok: false, error: 'Opened as a file, where there is no origin for a worker to claim.' });
+                }
                 if (!self.isSecureContext) {
                     return Promise.resolve({ ok: false, error: 'A service worker needs https, or localhost.' });
                 }
                 if (written) {
                     // A written document may not touch its service worker
-                    // container at all -- every call throws InvalidStateError --
-                    // and does not need to: the frames it opens load real URLs,
-                    // which an installed worker claims by scope, and a frame
-                    // that gets there first is served this file by the host's
-                    // 404 page and installs the worker itself.
-                    return Promise.resolve({ ok: true });
+                    // container at all -- every call throws InvalidStateError.
+                    // A frame of it at a real URL may, so open.svg installs the
+                    // worker, which then claims the proxied frames by scope.
+                    // A host with a 404 page would heal itself on the first
+                    // proxied request; a CDN without one answers it with an
+                    // error, so the worker has to be there before any frame is.
+                    return install();
                 }
                 return sw.register(BASE + 'sw.js', { scope: BASE }).then(active).then(function (reg) {
                     return ask(sw.controller || reg.active, { __px: 'config', wisp: WISP });
@@ -1593,7 +1629,13 @@
                 emit(type, ev) {
                     (listeners[type] || []).forEach(fn => { try { fn(ev); } catch (e) { console.error(e); } });
                 },
-                go(url) { if (PROXY_ORIGIN) frame.src = engine.encodeUrl(url); },
+                go(url) {
+                    if (!PROXY_ORIGIN) return;
+                    const src = engine.encodeUrl(url);
+                    // A request that beats the worker is answered by the host,
+                    // which may have no 404 page to send it back here.
+                    PX.ready.then(() => { frame.src = src; });
+                },
             };
         }
 

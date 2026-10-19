@@ -1,9 +1,9 @@
 <svg xmlns="http://www.w3.org/1999/xhtml" style="height: 100%;">
 
 
-<button 
+<button
     onclick=
-        "      
+        "
             const n = window.open('about:blank', '_blank');
             if (n) {
                 fetch('./index.html')
@@ -26,9 +26,47 @@
     click here
 </button>
 
-<script>
-    document.addEventListener("DOMContentLoaded",()=>document.elementFromPoint(innerWidth/2,innerHeight/2)?.click());
-</script>
+<script><![CDATA[
+    // This file does double duty, because on a host that serves .html as
+    // text/plain it is the only document here that runs at all. Clicked, it
+    // writes index.html into a blank window. Loaded as open.svg?px=register in
+    // a hidden frame of that window, it installs the service worker, which the
+    // written page cannot do itself -- its own container throws on every call
+    // -- and reports back. The worker then answers that window's frames.
+    document.addEventListener("DOMContentLoaded", () => {
+        if (!/(?:^|[?&])px=register(?:&|$)/.test(location.search)) {
+            document.elementFromPoint(innerWidth / 2, innerHeight / 2)?.click();
+            return;
+        }
+
+        const tell = (ok, error) => parent.postMessage({ __px: 'registered', ok, error }, location.origin);
+        const sw = navigator.serviceWorker;
+        if (!sw) return tell(false, 'This browser has no service workers.');
+
+        sw.register('./sw.js', { scope: './' }).then(reg => new Promise((done, fail) => {
+            // Wait for a worker that can answer requests.
+            const tick = () => {
+                const w = reg.installing || reg.waiting || reg.active;
+                if (reg.active) return done(reg.active);
+                if (w) return w.addEventListener('statechange', tick, { once: true });
+                fail(new Error('the worker went away while installing'));
+            };
+            tick();
+        })).then(worker => new Promise(done => {
+            // Ask whether it came up. No answer is not an error.
+            const t = setTimeout(() => done(true), 8000);
+            sw.addEventListener('message', (e) => {
+                if (!e.data || e.data.__px !== 'config') return;
+                clearTimeout(t);
+                done(!!e.data.ok);
+            }, { once: true });
+            worker.postMessage({ __px: 'config' });
+        })).then(
+            ok => tell(ok, ok ? '' : 'The worker is running but could not load libcurl.js.'),
+            e => tell(false, 'Could not start sw.js: ' + ((e && e.message) || e))
+        );
+    });
+]]></script>
 
 
 </svg>
