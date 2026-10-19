@@ -28,6 +28,8 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | node
 
 Then open **http://localhost:8080**.
 
+<br>
+
 <details>
 <summary><b>Other ways to run it</b></summary>
 
@@ -54,43 +56,6 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 ```
 
 </details>
-
-<details>
-<summary><b>Hosting</b></summary>
-
-<br>
-
-When using a hosting provider, it's best to separate the frontend and the backend because you may not be able to specify which port gets forwarded.
-
-I'd recommend using GitHub Pages or other free static hosting for the frontend (`index.html`) and hosting the backend (`proxy.js`) on a separate service.
-
-#### Backend configs:
-
-Build Command:
-```bash
-echo "no build"
-```
-
-Start Command:
-```bash
-node proxy.js
-```
-
-It would be greatly appreciated if you hosted a backend and submitted a pull request to this README so others can use it.
-
-</details>
-
-<br>
-
-## Current proxy backends
-For use with the github pages frontend at: https://ltorl.github.io/knoiren-browser <br>
-<br>
-(Copy and put into settings page):
-1. https://peekaboom-proxy.github.io (default)
-2. https://knoiren-browser.anjomous.workers.dev
-3. https://knoiren-browser-backend.onrender.com
-4. https://forgery-sophisticated-fish.abasthan.app
-5. https://knoiren-backend.de.deplexo.com
 
 <br>
 
@@ -128,8 +93,6 @@ https://jsdelivr.cdn.net/gh/ltorl/knoiren-browser/open.svg
 ```
 
 These wont be blocked because it would break real school sites. <br>
-
-You will still have to add a backend from above
 
 <br>
 
