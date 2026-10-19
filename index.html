@@ -1,6 +1,11 @@
 <!DOCTYPE html>
-<!-- Knoiren Browser, static build: the UI from index.js as a single file. Set the
-     proxy (a running index.js, port 8787) in Settings, or open with ?proxy=<url>. -->
+<!-- Knoiren Browser, single-file static build: the UI from index.js and the
+     Peekaboom proxy it browses through, in one page. The proxy is sw.js, this
+     file's own service worker, installed on load; Settings can point at another
+     Peekaboom instead, and ?proxy=<url> presets one. Deploy as index.html next
+     to sw.js, and, on a host with a 404 page, as a copy named 404.html so a
+     reloaded proxied URL can find its way back. open.svg writes this file into
+     a blank window, so nothing here may depend on the address bar. -->
 <html lang="en"> 
 
 <head>
@@ -1242,6 +1247,53 @@
         .btn-ok:hover {
             background: #5a9fe8;
         }
+        /* ---- Proxy bootstrap ------------------------------------------------
+           Shown while the service worker starts under a proxied URL, and when
+           it cannot start at all. The UI reports everything else in Settings. */
+        #px-boot {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            place-items: center;
+            padding: 16px;
+            background: var(--bg);
+            font: 15px/1.5 system-ui, sans-serif;
+            user-select: text;
+        }
+
+        #px-boot.open {
+            display: grid;
+        }
+
+        #px-boot .px-card {
+            width: 100%;
+            max-width: 560px;
+            background: var(--fg);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        #px-boot .px-kind {
+            color: var(--muted);
+            font-size: 13px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        #px-boot .px-title {
+            margin: 4px 0 12px;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        #px-boot .px-detail {
+            margin: 0;
+            color: var(--muted);
+            font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
     </style>
 </head>
 
@@ -1291,14 +1343,178 @@
         <div class="modal" id="modal-box"></div>
     </div>
 
+    <div id="px-boot">
+        <div class="px-card">
+            <div class="px-kind" id="px-boot-kind">Peekaboom</div>
+            <div class="px-title" id="px-boot-title">Starting the proxy…</div>
+            <pre class="px-detail" id="px-boot-detail"></pre>
+        </div>
+    </div>
+
+    <script>
+        // ---------------------------------------------------------- bootstrap
+        // The UI browses through sw.js, a port of the proxy to a service
+        // worker, so the page installs it before anything loads. Nothing here
+        // may read the address bar: open.svg writes this file into an
+        // about:blank window, where location says nothing about where the page
+        // came from while its base URL still does.
+        (function () {
+            // The relay is fixed here, as it is in sw.js.
+            var WISP = 'wss://anura.pro/';
+            var BKEY = '__px_base';
+            var sw = navigator.serviceWorker;
+
+            // Where this file really came from: its base URL, which a blank
+            // window inherits from whatever wrote into it.
+            var HERE = (function () {
+                var tries = [document.baseURI, location.href];
+                for (var i = 0; i < tries.length; i++) {
+                    try {
+                        var u = new URL(tries[i]);
+                        if (/^https?:$/.test(u.protocol)) return u;
+                    } catch (e) { }
+                }
+                // Opened as a file, where there is no proxy to be had.
+                return null;
+            })();
+            // document.open() hands the new document the URL of whatever wrote
+            // into it, so a page written into a blank window looks like open.svg
+            // and only its navigation entry still says where it started.
+            var entry = performance.getEntriesByType
+                && performance.getEntriesByType('navigation')[0];
+            var written = !/^https?:$/.test(location.protocol)
+                || !!(entry && entry.name === 'about:blank');
+            var path = HERE ? HERE.pathname : '/';
+
+            // The directory this file was served from. A service worker may
+            // only claim the directory it came from, so a project page under
+            // /name/ proxies under /name/__px/ and the base has to be worked
+            // out at runtime.
+            var at = path.indexOf('/__px/');
+            var BASE, home;
+            if (at >= 0) {
+                // The host served this file in place of a proxied URL.
+                BASE = path.slice(0, at + 1);
+                home = false;
+            } else if (written || /(?:^|\/)(?:index|200|404)\.html$/.test(path) || /\/$/.test(path)) {
+                BASE = path.replace(/[^/]*$/, '');
+                home = true;
+            } else {
+                // A path the worker is meant to answer but hid from the address
+                // bar: the base it last registered under is all that is left.
+                try { BASE = localStorage.getItem(BKEY) || '/'; } catch (e) { BASE = '/'; }
+                home = false;
+            }
+            var ORIGIN = HERE ? HERE.origin : location.origin;
+
+            var PX = window.__px = {
+                here: HERE,
+                origin: ORIGIN,
+                base: BASE,
+                prefix: BASE + '__px/',
+                // The address Settings shows for the built-in proxy: an origin
+                // plus this deployment's directory, without a trailing slash,
+                // which is the shape parseProxyOrigin() keeps.
+                proxy: ORIGIN + BASE.replace(/\/+$/, ''),
+                home: home,
+                // Written into a blank window: same origin and base, but no
+                // service worker container of its own -- see PX.ready.
+                written: written,
+                home: home,
+                ready: null
+            };
+            if (home) { try { localStorage.setItem(BKEY, BASE); } catch (e) { } }
+
+            // The card only ever says the proxy is coming up, or why it did not.
+            function card(kind, title, detail) {
+                document.getElementById('px-boot-kind').textContent = kind;
+                document.getElementById('px-boot-title').textContent = title;
+                document.getElementById('px-boot-detail').textContent = detail || '';
+                document.getElementById('px-boot').classList.add('open');
+            }
+
+            // Wait for a registration to have a worker that can answer frames.
+            function active(reg) {
+                return new Promise(function (done, fail) {
+                    var tick = function () {
+                        var w = reg.installing || reg.waiting || reg.active;
+                        if (reg.active) return done(reg);
+                        if (w) return w.addEventListener('statechange', tick, { once: true });
+                        fail(new Error('the worker went away while installing'));
+                    };
+                    tick();
+                });
+            }
+
+            // Hand the worker the relay and ask whether it came up.
+            function ask(worker, msg) {
+                return new Promise(function (done) {
+                    var t = setTimeout(function () { done(null); }, 8000);
+                    var on = function (e) {
+                        if (!e.data || e.data.__px !== 'config') return;
+                        clearTimeout(t);
+                        sw.removeEventListener('message', on);
+                        done(e.data);
+                    };
+                    sw.addEventListener('message', on);
+                    try { worker.postMessage(msg); } catch (e) { clearTimeout(t); done(null); }
+                });
+            }
+
+            PX.ready = (function () {
+                if (!sw) return Promise.resolve({ ok: false, error: 'This browser has no service workers.' });
+                if (!self.isSecureContext) {
+                    return Promise.resolve({ ok: false, error: 'A service worker needs https, or localhost.' });
+                }
+                if (written) {
+                    // A written document may not touch its service worker
+                    // container at all -- every call throws InvalidStateError --
+                    // and does not need to: the frames it opens load real URLs,
+                    // which an installed worker claims by scope, and a frame
+                    // that gets there first is served this file by the host's
+                    // 404 page and installs the worker itself.
+                    return Promise.resolve({ ok: true });
+                }
+                return sw.register(BASE + 'sw.js', { scope: BASE }).then(active).then(function (reg) {
+                    return ask(sw.controller || reg.active, { __px: 'config', wisp: WISP });
+                }).then(function (reply) {
+                    // No reply means the page is not controlled, which the
+                    // frames do not need; a reply that says so does not.
+                    if (reply && !reply.ok) {
+                        return { ok: false, error: 'The worker is running but could not load libcurl.js.' };
+                    }
+                    return { ok: true };
+                }).catch(function (err) {
+                    return { ok: false, error: 'Could not start ' + BASE + 'sw.js: ' + ((err && err.message) || err) };
+                });
+            })();
+
+            // ------------------------------------------------ not the home page
+            // A static host serves this file for unknown paths, so a proxied URL
+            // lands here whenever no worker is controlling the page yet: install
+            // one, then reload so the worker answers the request instead. The UI
+            // sits this out -- see the end of the module below.
+            if (!home) {
+                card('Peekaboom', 'Starting the proxy…', location.href);
+                PX.ready.then(function (r) {
+                    if (r.ok) location.reload();
+                    else card('Error', 'Could not start the proxy', r.error + '\n' + location.href);
+                });
+            }
+        })();
+    </script>
+
     <script type="module">
-        // Static build: there is no server to fill in the proxy's address, so it is
-        // set in Settings and kept in localStorage. Opening this page with
-        // ?proxy=https://proxy.example.com presets it. The address can include a
-        // path, since a static Peekaboom may be deployed in a subdirectory.
+        // The proxy is this page's own service worker, installed by the
+        // bootstrap above, so its address is wherever this file is served from.
+        // Settings can point at another Peekaboom -- a running index.js, or
+        // another copy of this deployment -- and keeps it in localStorage;
+        // ?proxy=https://proxy.example.com presets one. The address can include
+        // a path, since a static Peekaboom may live in a subdirectory.
+        const PX = window.__px;
         const PROXY_KEY = 'knoiren_proxy_origin';
         // Used until Settings says otherwise; clearing the field brings it back.
-        const DEFAULT_PROXY_ORIGIN = 'https://peekaboom-proxy.github.io';
+        const DEFAULT_PROXY_ORIGIN = PX.proxy;
         const PX_PREFIX = '/__px/';
 
         // "proxy.example.com", "localhost:8787" or a full URL -> its origin, or '' if invalid.
@@ -1330,7 +1546,8 @@
             if (stored !== null) PROXY_ORIGIN = parseProxyOrigin(stored);
         } catch (e) { }
         {
-            const preset = parseProxyOrigin(new URLSearchParams(location.search).get('proxy'));
+            // Read off the real URL: in a written-out window there is no search.
+            const preset = parseProxyOrigin(PX.here && PX.here.searchParams.get('proxy'));
             if (preset) {
                 PROXY_ORIGIN = preset;
                 try { localStorage.setItem(PROXY_KEY, preset); } catch (e) { }
@@ -1472,12 +1689,25 @@
         };
         let engineReady = false;
         let engineFailed = false;
+        let engineError = '';
 
         // Only checks that the proxy answers; tabs load either way. Runs at startup
         // and again whenever settings is shown while the proxy isn't known to work.
         async function initProxy() {
             const origin = PROXY_ORIGIN;
             if (!origin) { renderAllSettings(); return; }
+            if (origin === PX.proxy) {
+                // The built-in proxy: its own worker says whether it installed,
+                // which a request to the static page it is served by would not.
+                const r = await PX.ready;
+                if (origin !== PROXY_ORIGIN || engineReady) return;
+                if (r.ok) { markProxyReady(); return; }
+                engineFailed = true;
+                engineError = r.error || '';
+                console.error('The built-in proxy did not start', r.error);
+                renderAllSettings();
+                return;
+            }
             try {
                 await fetch(origin + '/', { mode: 'no-cors', cache: 'no-store' });
                 // The proxy may have been changed while this was in flight.
@@ -1502,6 +1732,7 @@
             } catch (e) { }
             engineReady = false;
             engineFailed = false;
+            engineError = '';
             if (origin) {
                 tabs.forEach(t => {
                     if (t.pendingNav) {
@@ -1519,17 +1750,22 @@
         function markProxyReady() {
             engineReady = true;
             engineFailed = false;
+            engineError = '';
             renderAllSettings();
         }
 
         // Closing or reloading the whole page throws away every tab, so the browser
         // is asked to confirm first.
-        window.addEventListener('beforeunload', (e) => {
-            e.preventDefault();
-            // Older browsers need one of these; the text itself is always ignored.
-            e.returnValue = '';
-            return '';
-        });
+        // The bootstrap reloads the page when a static host served this file in
+        // place of a proxied URL, so the prompt is only armed on the UI itself.
+        if (PX.home) {
+            window.addEventListener('beforeunload', (e) => {
+                e.preventDefault();
+                // Older browsers need one of these; the text itself is always ignored.
+                e.returnValue = '';
+                return '';
+            });
+        }
 
         function decodeRealUrl(u) {
             try {
@@ -1593,7 +1829,10 @@
             query = (query || '').trim().slice(0, 200);
             if (!query) return [];
             const api = 'https://suggestqueries.google.com/complete/search?client=firefox&q=' + encodeURIComponent(query);
-            const sources = PROXY_ORIGIN ? [PROXY_ORIGIN + PX_PREFIX + api, api] : [api];
+            // The built-in proxy is no use to a written page: nothing controls
+            // it, so the request would go straight to the static host.
+            const viaProxy = PROXY_ORIGIN && !(PX.written && PROXY_ORIGIN === PX.proxy);
+            const sources = viaProxy ? [PROXY_ORIGIN + PX_PREFIX + api, api] : [api];
             for (const src of sources) {
                 try {
                     const data = await jsonp(src);
@@ -2129,7 +2368,7 @@
             input.autocomplete = 'off';
             input.setAttribute('autocapitalize', 'off');
             input.setAttribute('aria-label', 'Proxy URL');
-            input.placeholder = 'https://proxy.example.com';
+            input.placeholder = PX.proxy || 'https://proxy.example.com';
             // Keep what the user is typing when settings redraws.
             input.value = tab.proxyDraft != null ? tab.proxyDraft : PROXY_ORIGIN;
             input.addEventListener('input', () => { tab.proxyDraft = input.value; error.textContent = ''; });
@@ -2141,7 +2380,8 @@
             form.addEventListener('submit', (e) => {
                 e.preventDefault();
                 const raw = input.value.trim();
-                const origin = parseProxyOrigin(raw);
+                // Emptying the field goes back to the proxy built into this page.
+                const origin = raw ? parseProxyOrigin(raw) : PX.proxy;
                 if (raw && !origin) {
                     error.textContent = 'That doesn’t look like an http(s) address.';
                     return;
@@ -2175,26 +2415,37 @@
                 inner.appendChild(n);
             };
 
+            if (engineError) note(engineError, 'set-error');
+
             if (!PROXY_ORIGIN) {
-                note('Enter the address of a Peekaboom proxy, the one index.js serves on port 8787 ' +
-                    '(for example http://localhost:8787). Every site loads through it.');
+                note('No proxy is set. Enter the address of a Peekaboom proxy, or leave this field empty ' +
+                    'and save to use the one built into this page' + (PX.proxy ? ' (' + PX.proxy + ')' : '') +
+                    '. Every site loads through it.');
                 if (tab.pendingNav) note('Waiting to open ' + tab.pendingNav + ' once a proxy is saved.');
+            } else if (PROXY_ORIGIN === PX.proxy) {
+                note('Sites load through this page’s own service worker, under ' + PX.prefix + '.');
+                if (PX.written) {
+                    note('This copy of the page was written into a blank window, so it can’t reach the worker ' +
+                        'itself. Sites still load through it; the first one installs it if it isn’t there yet.');
+                }
+                note('Proxied sites share this page’s origin, so a site that got out of its frame could read your ' +
+                    'tabs and bookmarks. Pointing this at a Peekaboom on another origin keeps them apart.', 'set-warn');
             } else {
                 note('Sites load through ' + PROXY_ORIGIN + ', a separate origin from this page.');
                 const local = /^(localhost|127\.|\[::1\])/.test(new URL(PROXY_ORIGIN).hostname);
-                if (location.protocol === 'https:' && PROXY_ORIGIN.startsWith('http:') && !local) {
+                if (PX.origin.startsWith('https:') && PROXY_ORIGIN.startsWith('http:') && !local) {
                     note('This page is served over https, so the browser will block an http proxy. Use an https address.', 'set-warn');
                 }
-                if (proxySite() === location.origin) {
+                if (proxySite() === PX.origin) {
                     note('The proxy shares this page’s origin, so proxied sites could read your tabs and bookmarks. ' +
                         'Host this page somewhere else.', 'set-warn');
                 }
             }
 
-            note(location.origin === 'null'
-                ? 'Bookmarklets and tab muting need this page served over http(s); opened as a file, the proxy can’t tell it apart from a site.'
+            note(!PX.here
+                ? 'The proxy needs this page served over http(s); opened as a file, there is no origin for a service worker to claim.'
                 : 'Bookmarklets and tab muting work from any origin by default. If the proxy was started with UI_ORIGIN set, ' +
-                    'it must include ' + location.origin + ' (or *).');
+                    'it must include ' + PX.origin + ' (or *).');
         }
 
         function buildWindowSection(inner) {
@@ -3251,9 +3502,16 @@
             }
         });
 
-        renderBookmarks();
-        initProxy();
-        createTab();
+        // Not the home page: the bootstrap is installing the worker and will
+        // reload, so the UI stays out of the way until it does.
+        if (PX.home) {
+            renderBookmarks();
+            initProxy();
+            const first = createTab();
+            // index.html?url=https://example.com opens that address right away.
+            const want = PX.here && PX.here.searchParams.get('url');
+            if (want && first) navigateTab(first, want);
+        }
     </script>
 
     <script>

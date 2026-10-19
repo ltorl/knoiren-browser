@@ -1,0 +1,3530 @@
+<!DOCTYPE html>
+<!-- Knoiren Browser, single-file static build: the UI from index.js and the
+     Peekaboom proxy it browses through, in one page. The proxy is sw.js, this
+     file's own service worker, installed on load; Settings can point at another
+     Peekaboom instead, and ?proxy=<url> presets one. Deploy as index.html next
+     to sw.js, and, on a host with a 404 page, as a copy named 404.html so a
+     reloaded proxied URL can find its way back. open.svg writes this file into
+     a blank window, so nothing here may depend on the address bar. -->
+<html lang="en"> 
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="google-site-verification" content="EFxmzYKf5VFchCGvdM4891pUvAs6-S6h2ns5p09Wc1g" />
+    <meta name="referrer" content="no-referrer">
+    <title>New tab</title>
+    <link rel="icon" type="image/png" sizes="any" media="(prefers-color-scheme: light)"
+        href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAMAAAD04JH5AAAAZlBMVEUAAABAQEA4QEg4QEA6QEU6QEA8QEQ8QEA9QEM+QEM6QEI7QEQ7QEI8QEQ8QEI8QEQ8QEI9QEQ9QEI8QEM8QEI7QEM7QEM8QEM8QEM8QEQ8QEM9QEM9QEI7QEM7QEI8QEM8QEI8QEOBp9B1AAAAIXRSTlMAECAgMDBAQFBfYHBwf3+AgI+PkJCfoK+/z8/f39/f7+84OiXtAAAB70lEQVR42u3azU7jMBRA4SSeJmmHGX5MwEBLct//JTldWLIMsVNgYVf3W1WQKmdx1dhuG6WUusQAixfMEAFmOFgM0IDrCzjgDbLRCXtoQP0BHRzkm07ooAF1BuwxQ35oxggNqCtghPyyPTSgnoA3yC+b0UED6gi4gaxYcIsR5kItNKCOgDMHiVi0aH5AA8oOmOBf95DAXzSBFjsM+CpqSNCAMgP8DcMLniG4Q3jjB8yQwITwYWMhKwZoQHkBjxCc4IfK4BXhZjW1WPHv9aELBDELDSgvwEEQD90O/vUTJOMe/vpbCGKv0IDyAsKBmdEifvhIRvzeEWvXaEB5ARKZ8OlhtZEfXANZoQHlB8QLhz+QjQZoQH0BCyTi0CBaYGS1SA3uDA0oL+AFuUNmC8mYkFvAOGhAeQGP2LLZOEJWvMMgd+htoQHlBfTYstkwiIdrQXyI+Q+yYoAGlBXgpQbsBvFGpccO/sZeh9SgNtCAMgMOkIT/aJLyBxl7aEC5AWcOknDChAEGZx3CQ63cAGpA2QEGC+QCWxYhCww0oPyAS3/INGHLB9mIBhpQR4CPWCDIbURSX2gt8DfXgLoCzgyO2LK4eIBEHHygBtQZ4B1wxNriokP8vzBOA+oP8HpYOIwIDyMcLHr4v2vA9QUopa7SBwy1hh79c1UmAAAAAElFTkSuQmCC">
+
+    <link rel="icon" type="image/png" sizes="any" media="(prefers-color-scheme: dark)"
+        href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAMAAAD04JH5AAAAZlBMVEUAAAC/v7/Hv7/Hv7fFv7/Fv7rDv7/Dv7vCv7zBv7zFv73Ev73Ev7vDv73Dv7vDv73Dv7vCv73Cv7vDv73Dv7zEv7zEv7zDv7zDv7zDv7zDv7vEv73Ev7zCv73Cv7zDv73Dv7zDv7xno0nKAAAAIXRSTlMAECAgMDBAQFBfYHBwf3+AgI+PkJCfoK+/z8/f39/f7+84OiXtAAAB70lEQVR42u3azU7jMBRA4cTpJGmZGf4cMNCS3Pd/SU4XlixD7BRY2NX9VhWkyllcNbbbRimlLtHD4hULRIAFDhY9NOD6Ag54h2x0xB4aUH9ABwf5piM6aECdAXsskB9aMEID6goYIb9sDw2oJ+Ad8ssWdNCAOgJuICtm3GGEuVALDagj4MxBIhYtmh/QgLIDJvjXAyTwF02gxQ49vorqEzSgzAB/w/CCZwhuEd74HgskMCF82FjIih4aUF7AIwRH+KEyeEG4WU0tVvx7fegMQcxCA8oLcBDEQ7eDf/0EyXiAv/4OgtgLNKC8gHBgFrSIHz6SEb93xNo1GlBegEQmfHpYbeQH10BWaED5AfHC4Q9kox4aUF/ADIk4NIgWGFktUoO7QAPKC3hF7pDZQjIm5BYwDhpQXsAjtmw2TpAVbzDIHXpbaEB5AQO2bDYM4uGaER9i/oes6KEBZQV4qQG7QbxRGbCDv7HXITWoDTSgzIADJOEfmqT8QcYeGlBuwJmDJBwxoYfBWYfwUCs3gBpQdoDBDLnAlkXIDAMNKD/g0h8yTdjyQTaigQbUEeAjZghyG5HUF1oz/M01oK6AM4MTtiwu7iERBx+oAXUGeAecsLa46BD/L4zTgPoDvAEWDiPCwwgHiwH+7xpwfQFKqav0AXlzhL6TK7MLAAAAAElFTkSuQmCC">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@700&display=swap">
+    <style>
+        :root {
+            --bg: #282828;
+            --fg: #3c3c3c;
+            --text: #e8e8e8;
+            --muted: #9aa0a6;
+            --trash-icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>');
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            height: 100%;
+            overflow: hidden;
+            /* clip, unlike hidden, can't be scrolled by scripts: a page's
+               scrollIntoView() would otherwise shift the whole UI sideways. */
+            overflow: clip;
+            font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            user-select: none;
+        }
+
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            position: relative;
+        }
+
+        #tabbar {
+            display: flex;
+            align-items: flex-end;
+            height: 40px;
+            background: var(--bg);
+            padding: 0 6px 0 40px;
+            gap: 0;
+            flex: 0 0 auto;
+            overflow: hidden;
+            max-height: 40px;
+            transition: max-height 0.25s ease;
+        }
+
+        #app.chrome-hidden #tabbar {
+            max-height: 0;
+        }
+
+
+        .icon-btn {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background 0.15s ease, transform 0.25s ease;
+            flex: 0 0 auto;
+        }
+
+        .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.10);
+        }
+
+        .icon-btn img {
+            pointer-events: none;
+            -webkit-user-drag: none;
+        }
+
+        #collapse-btn {
+            position: absolute;
+            top: 5px;
+            left: 6px;
+            width: 30px;
+            height: 30px;
+            z-index: 100;
+            transform: translateY(3px);
+        }
+
+        #collapse-btn img {
+            width: 18px;
+            height: 18px;
+            transition: transform 0.25s ease;
+            filter: invert(1);
+        }
+
+        #collapse-btn.collapsed img {
+            transform: rotate(180deg);
+        }
+
+        #app.chrome-hidden #collapse-btn {
+            background: rgba(40, 40, 40, 0.85);
+        }
+
+        #app.chrome-hidden #collapse-btn:hover {
+            background: rgba(60, 60, 60, 0.95);
+        }
+
+        #tabs {
+            display: flex;
+            align-items: flex-end;
+            flex: 0 1 auto;
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: none;
+            padding: 0 8px;
+            isolation: isolate;
+        }
+
+        #tabs::-webkit-scrollbar {
+            display: none;
+        }
+
+        .tab {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-width: 100px;
+            width: 232px;
+            height: 32px;
+            padding: 0 10px;
+            background: var(--bg);
+            color: var(--muted);
+            cursor: default;
+            position: relative;
+            border-radius: 10px 10px 0 0;
+            flex: 0 1 232px;
+            font-size: 13px;
+            transition: background 0.12s ease;
+        }
+
+        .tab:not(.active):hover {
+            isolation: isolate;
+        }
+
+        .tab .favicon,
+        .tab .tab-title,
+        .tab .tab-close {
+            transition: transform 0.2s ease;
+        }
+
+        .tab:not(.active) .favicon,
+        .tab:not(.active) .tab-title,
+        .tab:not(.active) .tab-close {
+            transform: translateY(-3px);
+        }
+
+        .tab:not(.active):hover::before {
+            content: '';
+            position: absolute;
+            left: 2px;
+            right: 2px;
+            top: 0;
+            bottom: 6px;
+            background: #474747;
+            border-radius: 8px;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        .tab.dragging {
+            z-index: 5;
+            cursor: grabbing;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+            transition: none;
+        }
+
+        .tab.pinned {
+            width: 36px;
+            min-width: 36px;
+            flex: 0 0 36px;
+        }
+
+        .tab.label-anim .tab-title {
+            text-overflow: clip;
+        }
+
+        .tab.active {
+            background: var(--fg);
+            color: var(--text);
+            z-index: 1;
+        }
+
+        .tab.active::before,
+        .tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            width: 8px;
+            height: 8px;
+            pointer-events: none;
+        }
+
+        .tab.active::before {
+            left: -8px;
+            background: radial-gradient(circle at top left, transparent 8px, var(--fg) 8px);
+        }
+
+        .tab.active::after {
+            right: -8px;
+            background: radial-gradient(circle at top right, transparent 8px, var(--fg) 8px);
+        }
+
+        .tab .favicon {
+            width: 16px;
+            height: 16px;
+            flex: 0 0 16px;
+            border-radius: 3px;
+            object-fit: contain;
+            -webkit-user-drag: none;
+        }
+
+        .tab.closing .favicon {
+            flex: 0 1 16px;
+            min-width: 0;
+        }
+
+        .tab .tab-title {
+            flex: 1 1 auto;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .tab .tab-close {
+            flex: 0 0 18px;
+            width: 18px;
+            height: 18px;
+            line-height: 16px;
+            text-align: center;
+            border-radius: 50%;
+            font-size: 16px;
+            color: var(--muted);
+            opacity: 1;
+            transition: background 0.12s ease, transform 0.2s ease;
+        }
+
+        .tab .tab-audio {
+            display: none;
+            flex: 0 0 20px;
+            width: 20px;
+            height: 20px;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            color: var(--muted);
+            transition: background 0.12s ease, transform 0.2s ease;
+        }
+
+        .tab.has-audio .tab-audio {
+            display: flex;
+        }
+
+        .tab .tab-audio[data-sound="muted"] {
+            color: #f28b82;
+        }
+
+        .tab .tab-audio:hover {
+            background: rgba(255, 255, 255, 0.18);
+            color: #fff;
+        }
+
+        .tab:not(.active) .tab-audio {
+            transform: translateY(-3px);
+        }
+
+        .tab .tab-close:hover {
+            background: rgba(255, 255, 255, 0.18);
+            color: #fff;
+        }
+
+        .tab-sep {
+            width: 1px;
+            height: 18px;
+            background: var(--fg);
+            flex: 0 0 1px;
+            align-self: center;
+            margin: 0 2px;
+        }
+
+        .tab-sep.hidden {
+            background: transparent;
+        }
+
+        #newtab-btn {
+            width: 28px;
+            height: 28px;
+            margin: 0 4px 4px -4px;
+            font-size: 20px;
+            color: var(--text);
+            line-height: 1;
+        }
+
+        #toolbar {
+            background: var(--fg);
+            flex: 0 0 auto;
+            overflow: hidden;
+            transition: height 0.25s ease;
+        }
+
+        #navbar {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            height: 48px;
+            padding: 0 10px;
+        }
+
+        .nav-btn {
+            width: 40px;
+            height: 40px;
+        }
+
+        .nav-btn img {
+            width: 22px;
+            height: 22px;
+            filter: invert(0);
+            -webkit-user-drag: none;
+        }
+
+        .nav-btn.disabled {
+            opacity: 0.3;
+            pointer-events: none;
+        }
+
+        #btn-back img {
+            transform: rotate(180deg);
+        }
+
+        #urlbar {
+            flex: 1 1 auto;
+            display: flex;
+            align-items: center;
+            height: 32px;
+            background: var(--bg);
+            border-radius: 16px;
+            padding: 0 6px;
+            margin: 0 6px;
+            border: 1px solid transparent;
+            transition: border-color 0.15s ease;
+        }
+
+        #urlbar:focus-within {
+            border-color: rgba(120, 170, 255, 0.6);
+        }
+
+        #url-input {
+            flex: 1 1 auto;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text);
+            font-size: 14px;
+            user-select: text;
+        }
+
+        #url-input::placeholder {
+            color: var(--muted);
+        }
+
+        #url-suggest {
+            position: fixed;
+            z-index: 50;
+            background: var(--bg);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 14px;
+            padding: 6px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            display: none;
+        }
+
+        #url-suggest.open {
+            display: block;
+        }
+
+        #url-suggest .suggest-item {
+            padding: 8px 12px;
+            border-radius: 10px;
+            font-size: 14px;
+            color: var(--text);
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #url-suggest .suggest-item.active {
+            background: rgba(255, 255, 255, 0.10);
+        }
+
+        #url-suggest .suggest-item.open-link {
+            color: #cfe0ff;
+            background: rgba(80, 130, 255, 0.18);
+        }
+
+        #url-suggest .suggest-item.open-link.active {
+            background: rgba(80, 130, 255, 0.32);
+        }
+
+        #site-btn {
+            flex: 0 0 auto;
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            margin-left: -3px;
+            margin-right: 6px;
+            border-radius: 50%;
+            background: #3c3c3c;
+        }
+
+        #site-btn:hover,
+        #site-btn.active {
+            background: #555554;
+        }
+
+        #site-btn img {
+            width: 20px;
+            height: 20px;
+            -webkit-user-drag: none;
+        }
+
+        #site-panel {
+            position: fixed;
+            z-index: 50;
+            min-width: 250px;
+            background: var(--fg);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 12px;
+            padding: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+            color: var(--text);
+            display: none;
+        }
+
+        #site-panel.open {
+            display: block;
+        }
+
+        #site-panel .site-panel-head {
+            font-size: 13px;
+            font-weight: 600;
+            word-break: break-all;
+            margin-bottom: 10px;
+        }
+
+        #site-panel .site-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 13px;
+            padding: 4px 0;
+        }
+
+        #site-panel .site-status {
+            color: var(--muted);
+        }
+
+        #site-panel .site-reset {
+            margin-top: 12px;
+            width: 100%;
+            padding: 8px;
+            border: none;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.10);
+            color: var(--text);
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        #site-panel .site-reset:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.18);
+        }
+
+        #site-panel .site-reset:disabled {
+            opacity: 0.45;
+            cursor: default;
+        }
+
+        #star-btn {
+            width: 24px;
+            height: 24px;
+            flex: 0 0 24px;
+        }
+
+        #star-btn img {
+            width: 18px;
+            height: 18px;
+            -webkit-user-drag: none;
+        }
+
+        #games-btn,
+        #settings-btn {
+            margin-left: 2px;
+        }
+
+        #games-btn img,
+        #settings-btn img {
+            width: 22px;
+            height: 22px;
+            filter: none;
+            -webkit-user-drag: none;
+        }
+
+        #games-btn.active,
+        #settings-btn.active {
+            background: rgba(120, 170, 255, 0.18);
+        }
+
+        .sidebar {
+            position: absolute;
+            top: 0;
+            right: 0;
+            bottom: 0;
+            width: 300px;
+            max-width: 80%;
+            background: var(--fg);
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            box-shadow: -18px 0 16px -16px rgba(0, 0, 0, 0.45);
+            z-index: 20;
+            display: flex;
+            flex-direction: column;
+            transform: translateX(100%);
+            visibility: hidden;
+            transition: transform 0.22s ease, visibility 0s linear 0.22s;
+        }
+
+        .sidebar.open {
+            transform: translateX(0);
+            visibility: visible;
+            transition: transform 0.22s ease;
+        }
+
+        .sidebar-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 14px 10px 14px 18px;
+            font-size: 1rem;
+            font-weight: 700;
+            color: var(--text);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            flex: 0 0 auto;
+        }
+
+        .sidebar-close {
+            width: 30px;
+            height: 30px;
+            font-size: 20px;
+            color: var(--text);
+            line-height: 1;
+        }
+
+        .sidebar-body {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 12px;
+            overflow-y: auto;
+        }
+
+        #games-sidebar-list .gs-link {
+            padding: 12px 16px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text);
+            font-size: 0.92rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s ease, transform 0.15s ease;
+        }
+
+        #games-sidebar-list .gs-link:hover {
+            background: #45a29e;
+            color: #0b0c10;
+            transform: translateX(-2px);
+        }
+
+        .settingspage {
+            position: absolute;
+            inset: 0;
+            overflow-y: auto;
+            background: linear-gradient(135deg, #0b0c10 0%, #1f2833 100%);
+            color: var(--text);
+            padding: 40px 20px 60px;
+        }
+
+        .settingspage .set-inner {
+            width: 100%;
+            max-width: 640px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .settingspage .set-title {
+            font-size: 1.9rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+
+        .set-group {
+            font-size: 0.72rem;
+            font-weight: 700;
+            letter-spacing: 1.2px;
+            text-transform: uppercase;
+            color: var(--muted);
+            margin: 18px 4px 2px;
+        }
+
+        .set-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 14px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text);
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease;
+        }
+
+        .set-option:hover {
+            background: rgba(255, 255, 255, 0.11);
+        }
+
+        .set-option.selected {
+            border-color: #45a29e;
+            background: rgba(69, 162, 158, 0.16);
+        }
+
+        .set-radio {
+            flex: 0 0 14px;
+            width: 14px;
+            height: 14px;
+            margin-top: 3px;
+            border-radius: 50%;
+            border: 2px solid var(--muted);
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .set-option.selected .set-radio {
+            border-color: #66fcf1;
+            box-shadow: inset 0 0 0 3px #66fcf1;
+        }
+
+        .set-option .set-name {
+            font-size: 0.92rem;
+            font-weight: 600;
+        }
+
+        .set-option .set-desc {
+            font-size: 0.76rem;
+            line-height: 1.45;
+            color: var(--muted);
+            margin-top: 3px;
+        }
+
+        .set-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 0 6px;
+            font-size: 0.76rem;
+            color: var(--muted);
+        }
+
+        .set-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--muted);
+            flex: 0 0 8px;
+        }
+
+        .set-dot.ready {
+            background: #66fcf1;
+        }
+
+        .set-dot.failed {
+            background: #e06c6c;
+        }
+
+        .set-field {
+            display: flex;
+            gap: 8px;
+        }
+
+        .set-input {
+            flex: 1 1 auto;
+            min-width: 0;
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: var(--text);
+            font: inherit;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.15s ease, background 0.15s ease;
+        }
+
+        .set-input:focus {
+            border-color: #45a29e;
+            background: rgba(69, 162, 158, 0.1);
+        }
+
+        .set-btn {
+            flex: 0 0 auto;
+            padding: 0 18px;
+            border-radius: 10px;
+            border: 1px solid #45a29e;
+            background: rgba(69, 162, 158, 0.2);
+            color: var(--text);
+            font: inherit;
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        .set-btn:hover {
+            background: rgba(69, 162, 158, 0.35);
+        }
+
+        .set-note.set-error:empty {
+            display: none;
+        }
+
+        .set-note.set-error,
+        .set-note.set-warn {
+            color: #e8a06c;
+        }
+
+        .set-note {
+            padding: 0 6px;
+            font-size: 0.72rem;
+            line-height: 1.5;
+            color: var(--muted);
+        }
+
+        .set-site {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 10px 10px 14px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text);
+            font-size: 0.88rem;
+        }
+
+        .set-site .set-site-name {
+            flex: 1 1 auto;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .set-site .set-del {
+            flex: 0 0 auto;
+            width: 30px;
+            height: 30px;
+            display: grid;
+            place-items: center;
+            border-radius: 8px;
+            border: none;
+            background: transparent;
+            padding: 0;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        /* Masked so the glyph takes its colour from the button state. */
+        .set-site .set-del::before {
+            content: '';
+            width: 17px;
+            height: 17px;
+            background: var(--muted);
+            transition: background 0.15s ease;
+            -webkit-mask: var(--trash-icon) center / contain no-repeat;
+            mask: var(--trash-icon) center / contain no-repeat;
+        }
+
+        .set-site .set-del:hover {
+            background: rgba(224, 108, 108, 0.18);
+        }
+
+        .set-site .set-del:hover::before {
+            background: #ffb4b4;
+        }
+
+        .set-empty {
+            padding: 14px;
+            border-radius: 10px;
+            border: 1px dashed rgba(255, 255, 255, 0.14);
+            font-size: 0.82rem;
+            color: var(--muted);
+            text-align: center;
+        }
+
+        #bookmarksbar {
+            display: flex;
+            align-items: center;
+            gap: 2px;
+            height: 34px;
+            padding: 0 8px;
+            background: var(--fg);
+            border-top: 1px solid rgba(255, 255, 255, 0.06);
+            overflow-x: auto;
+            overflow-y: hidden;
+            scrollbar-width: none;
+            white-space: nowrap;
+        }
+
+        #bookmarksbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .bm {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            height: 26px;
+            padding: 0 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--text);
+            max-width: 180px;
+            flex: 0 0 auto;
+            transition: background 0.12s ease;
+        }
+
+        .bm:hover {
+            background: rgba(255, 255, 255, 0.10);
+        }
+
+        .bm img {
+            width: 16px;
+            height: 16px;
+            flex: 0 0 16px;
+            object-fit: contain;
+            -webkit-user-drag: none;
+        }
+
+        .bm .bm-label {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        #bookmarksbar.empty {
+            display: none;
+        }
+
+        #content {
+            flex: 1 1 auto;
+            position: relative;
+            background: var(--bg);
+            overflow: hidden;
+            overflow: clip;
+        }
+
+        .panel {
+            position: absolute;
+            inset: 0;
+            display: none;
+        }
+
+        .panel.active {
+            display: block;
+        }
+
+        .panel iframe.webframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+            background: #fff;
+        }
+
+        .newtab {
+            position: absolute;
+            inset: 0;
+            overflow-y: auto;
+            background: #232428;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px 20px 100px;
+            /* Search-bar height; everything on the page is sized from it so the
+               layout scales with the window (32px on small screens, up to 64px). */
+            --nt: clamp(32px, min(2.5vw, 4.6vh), 64px);
+        }
+
+        .noproxy {
+            position: absolute;
+            inset: 0;
+            background: #232428;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+            padding: 40px 20px 100px;
+            text-align: center;
+        }
+
+        .noproxy .np-title {
+            font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+            font-size: clamp(1.6rem, 3vw, 2.4rem);
+            font-weight: 700;
+        }
+
+        .noproxy .np-text {
+            color: rgba(255, 255, 255, 0.65);
+            font-size: 1rem;
+        }
+
+        .newtab .nt-title {
+            font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+            font-size: calc(var(--nt) * 1.06);
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            line-height: 1.1;
+            margin-bottom: calc(var(--nt) * 0.55);
+            text-align: center;
+        }
+
+        .newtab .nt-search {
+            position: relative;
+            width: 100%;
+            max-width: calc(var(--nt) * 13);
+        }
+
+        .newtab .nt-input-group {
+            display: flex;
+            align-items: center;
+            width: 100%;
+            height: var(--nt);
+            background: #373942;
+            border: 1px solid #4a4c55;
+            border-radius: 999px;
+            transition: border-color 0.15s ease;
+        }
+
+        .newtab .nt-input-group:focus-within {
+            border-color: #6b6e7a;
+        }
+
+        .newtab .nt-input {
+            flex: 1 1 auto;
+            min-width: 0;
+            height: 100%;
+            padding: 0 4px 0 calc(var(--nt) * 0.45);
+            border: none;
+            background: transparent;
+            color: #fff;
+            font: inherit;
+            font-size: max(13px, calc(var(--nt) * 0.3));
+            outline: none;
+            user-select: text;
+        }
+
+        .newtab .nt-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+
+        .newtab .nt-go {
+            flex: 0 0 auto;
+            display: grid;
+            place-items: center;
+            width: var(--nt);
+            height: calc(var(--nt) - 2px);
+            margin-right: calc(var(--nt) * 0.06);
+            border: none;
+            border-radius: 999px;
+            background: transparent;
+            color: #e8e8e8;
+            cursor: pointer;
+        }
+
+        .newtab .nt-go:hover {
+            color: #fff;
+        }
+
+        .newtab .nt-go svg {
+            width: calc(var(--nt) * 0.48);
+            height: calc(var(--nt) * 0.48);
+        }
+
+        .newtab .nt-suggest {
+            position: absolute;
+            top: calc(100% + var(--nt) * 0.15);
+            left: 0;
+            right: 0;
+            background: #2e3036;
+            border: 1px solid #4a4c55;
+            border-radius: calc(var(--nt) * 0.4);
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+            padding: 6px;
+            z-index: 5;
+            display: none;
+        }
+
+        .newtab .nt-suggest.open {
+            display: block;
+        }
+
+        .newtab .nt-suggest .suggest-item {
+            padding: calc(var(--nt) * 0.16) calc(var(--nt) * 0.3);
+            border-radius: calc(var(--nt) * 0.25);
+            color: #e8e8e8;
+            font-size: max(12px, calc(var(--nt) * 0.27));
+            cursor: pointer;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .newtab .nt-suggest .suggest-item.active {
+            background: #3d4049;
+            color: #fff;
+        }
+
+        .newtab .nt-github {
+            position: absolute;
+            right: calc(var(--nt) * 0.3);
+            bottom: calc(var(--nt) * 0.2);
+            color: #fff;
+            font-size: max(12px, calc(var(--nt) * 0.22));
+            text-decoration: none;
+        }
+
+        .newtab .nt-github:hover {
+            text-decoration: underline;
+        }
+
+        #ctx-menu {
+            position: fixed;
+            min-width: 200px;
+            background: #2b2b2b;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            padding: 6px 0;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+            z-index: 10000;
+            display: none;
+            font-size: 13px;
+        }
+
+        #ctx-menu .ctx-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            color: var(--text);
+            white-space: nowrap;
+        }
+
+        #ctx-menu .ctx-item:hover {
+            background: rgba(255, 255, 255, 0.10);
+        }
+
+        #ctx-menu .ctx-item.disabled {
+            color: var(--muted);
+            pointer-events: none;
+        }
+
+        #ctx-menu .ctx-sep {
+            height: 1px;
+            background: rgba(255, 255, 255, 0.12);
+            margin: 6px 0;
+        }
+
+        .bm-dropdown {
+            position: fixed;
+            min-width: 200px;
+            background: #2b2b2b;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 8px;
+            padding: 6px 0;
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+            z-index: 9000;
+            font-size: 13px;
+        }
+
+        .bm-dropdown .dd-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 7px 14px;
+            cursor: pointer;
+            color: var(--text);
+            max-width: 280px;
+        }
+
+        .bm-dropdown .dd-item:hover {
+            background: rgba(255, 255, 255, 0.10);
+        }
+
+        .bm-dropdown .dd-item img {
+            width: 16px;
+            height: 16px;
+            flex: 0 0 16px;
+            object-fit: contain;
+        }
+
+        .bm-dropdown .dd-item .dd-label {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .bm-dropdown .dd-empty {
+            padding: 7px 14px;
+            color: var(--muted);
+        }
+
+        #modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 11000;
+        }
+
+        #modal-overlay.show {
+            display: flex;
+        }
+
+        .modal {
+            background: #2b2b2b;
+            border-radius: 12px;
+            padding: 22px;
+            width: 380px;
+            max-width: 90vw;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+        }
+
+        .modal h3 {
+            margin-bottom: 16px;
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .modal label {
+            display: block;
+            font-size: 12px;
+            color: var(--muted);
+            margin: 10px 0 4px;
+        }
+
+        .modal input {
+            width: 100%;
+            padding: 9px 12px;
+            background: var(--bg);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            border-radius: 6px;
+            color: var(--text);
+            font-size: 14px;
+            outline: none;
+            user-select: text;
+        }
+
+        .modal input:focus {
+            border-color: rgba(120, 170, 255, 0.6);
+        }
+
+        .modal .modal-msg {
+            font-size: 14px;
+            line-height: 1.5;
+            color: var(--text);
+            word-break: break-all;
+            white-space: pre-line;
+        }
+
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .modal-actions button {
+            padding: 8px 18px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .btn-cancel {
+            background: rgba(255, 255, 255, 0.1);
+            color: var(--text);
+        }
+
+        .btn-cancel:hover {
+            background: rgba(255, 255, 255, 0.18);
+        }
+
+        .btn-ok {
+            background: #4a90d9;
+            color: #fff;
+        }
+
+        .btn-ok:hover {
+            background: #5a9fe8;
+        }
+        /* ---- Proxy bootstrap ------------------------------------------------
+           Shown while the service worker starts under a proxied URL, and when
+           it cannot start at all. The UI reports everything else in Settings. */
+        #px-boot {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 1000;
+            place-items: center;
+            padding: 16px;
+            background: var(--bg);
+            font: 15px/1.5 system-ui, sans-serif;
+            user-select: text;
+        }
+
+        #px-boot.open {
+            display: grid;
+        }
+
+        #px-boot .px-card {
+            width: 100%;
+            max-width: 560px;
+            background: var(--fg);
+            border-radius: 12px;
+            padding: 24px;
+        }
+
+        #px-boot .px-kind {
+            color: var(--muted);
+            font-size: 13px;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+        }
+
+        #px-boot .px-title {
+            margin: 4px 0 12px;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        #px-boot .px-detail {
+            margin: 0;
+            color: var(--muted);
+            font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="app">
+        <button id="collapse-btn" class="icon-btn" title="Hide toolbar"></button>
+
+        <div id="tabbar">
+            <div id="tabs"></div>
+            <button id="newtab-btn" class="icon-btn" title="New tab">+</button>
+        </div>
+
+        <div id="toolbar">
+            <div id="navbar">
+                <button id="btn-back" class="icon-btn nav-btn" title="Back"></button>
+                <button id="btn-forward" class="icon-btn nav-btn" title="Forward"></button>
+                <button id="btn-reload" class="icon-btn nav-btn" title="Reload"></button>
+                <div id="urlbar">
+                    <button id="site-btn" class="icon-btn" title="Site settings"></button>
+                    <input id="url-input" type="text" spellcheck="false" autocomplete="off"
+                        placeholder="Search DuckDuckGo or enter a URL">
+                    <button id="star-btn" class="icon-btn" title="Bookmark this page"></button>
+                </div>
+                <button id="games-btn" class="icon-btn nav-btn" title="Games"></button>
+                <button id="settings-btn" class="icon-btn nav-btn" title="Settings"></button>
+            </div>
+            <div id="bookmarksbar"></div>
+        </div>
+
+        <div id="content">
+            <aside id="games-sidebar" class="sidebar">
+                <div class="sidebar-head">
+                    <span>Games</span>
+                    <button id="games-sidebar-close" class="icon-btn sidebar-close" title="Close">×</button>
+                </div>
+                <div id="games-sidebar-list" class="sidebar-body"></div>
+            </aside>
+        </div>
+
+        <div id="url-suggest"></div>
+        <div id="site-panel"></div>
+    </div>
+
+    <div id="ctx-menu"></div>
+
+    <div id="modal-overlay">
+        <div class="modal" id="modal-box"></div>
+    </div>
+
+    <div id="px-boot">
+        <div class="px-card">
+            <div class="px-kind" id="px-boot-kind">Peekaboom</div>
+            <div class="px-title" id="px-boot-title">Starting the proxy…</div>
+            <pre class="px-detail" id="px-boot-detail"></pre>
+        </div>
+    </div>
+
+    <script>
+        // ---------------------------------------------------------- bootstrap
+        // The UI browses through sw.js, a port of the proxy to a service
+        // worker, so the page installs it before anything loads. Nothing here
+        // may read the address bar: open.svg writes this file into an
+        // about:blank window, where location says nothing about where the page
+        // came from while its base URL still does.
+        (function () {
+            // The relay is fixed here, as it is in sw.js.
+            var WISP = 'wss://anura.pro/';
+            var BKEY = '__px_base';
+            var sw = navigator.serviceWorker;
+
+            // Where this file really came from: its base URL, which a blank
+            // window inherits from whatever wrote into it.
+            var HERE = (function () {
+                var tries = [document.baseURI, location.href];
+                for (var i = 0; i < tries.length; i++) {
+                    try {
+                        var u = new URL(tries[i]);
+                        if (/^https?:$/.test(u.protocol)) return u;
+                    } catch (e) { }
+                }
+                // Opened as a file, where there is no proxy to be had.
+                return null;
+            })();
+            // document.open() hands the new document the URL of whatever wrote
+            // into it, so a page written into a blank window looks like open.svg
+            // and only its navigation entry still says where it started.
+            var entry = performance.getEntriesByType
+                && performance.getEntriesByType('navigation')[0];
+            var written = !/^https?:$/.test(location.protocol)
+                || !!(entry && entry.name === 'about:blank');
+            var path = HERE ? HERE.pathname : '/';
+
+            // The directory this file was served from. A service worker may
+            // only claim the directory it came from, so a project page under
+            // /name/ proxies under /name/__px/ and the base has to be worked
+            // out at runtime.
+            var at = path.indexOf('/__px/');
+            var BASE, home;
+            if (at >= 0) {
+                // The host served this file in place of a proxied URL.
+                BASE = path.slice(0, at + 1);
+                home = false;
+            } else if (written || /(?:^|\/)(?:index|200|404)\.html$/.test(path) || /\/$/.test(path)) {
+                BASE = path.replace(/[^/]*$/, '');
+                home = true;
+            } else {
+                // A path the worker is meant to answer but hid from the address
+                // bar: the base it last registered under is all that is left.
+                try { BASE = localStorage.getItem(BKEY) || '/'; } catch (e) { BASE = '/'; }
+                home = false;
+            }
+            var ORIGIN = HERE ? HERE.origin : location.origin;
+
+            var PX = window.__px = {
+                here: HERE,
+                origin: ORIGIN,
+                base: BASE,
+                prefix: BASE + '__px/',
+                // The address Settings shows for the built-in proxy: an origin
+                // plus this deployment's directory, without a trailing slash,
+                // which is the shape parseProxyOrigin() keeps.
+                proxy: ORIGIN + BASE.replace(/\/+$/, ''),
+                home: home,
+                // Written into a blank window: same origin and base, but no
+                // service worker container of its own -- see PX.ready.
+                written: written,
+                home: home,
+                ready: null
+            };
+            if (home) { try { localStorage.setItem(BKEY, BASE); } catch (e) { } }
+
+            // The card only ever says the proxy is coming up, or why it did not.
+            function card(kind, title, detail) {
+                document.getElementById('px-boot-kind').textContent = kind;
+                document.getElementById('px-boot-title').textContent = title;
+                document.getElementById('px-boot-detail').textContent = detail || '';
+                document.getElementById('px-boot').classList.add('open');
+            }
+
+            // Wait for a registration to have a worker that can answer frames.
+            function active(reg) {
+                return new Promise(function (done, fail) {
+                    var tick = function () {
+                        var w = reg.installing || reg.waiting || reg.active;
+                        if (reg.active) return done(reg);
+                        if (w) return w.addEventListener('statechange', tick, { once: true });
+                        fail(new Error('the worker went away while installing'));
+                    };
+                    tick();
+                });
+            }
+
+            // Hand the worker the relay and ask whether it came up.
+            function ask(worker, msg) {
+                return new Promise(function (done) {
+                    var t = setTimeout(function () { done(null); }, 8000);
+                    var on = function (e) {
+                        if (!e.data || e.data.__px !== 'config') return;
+                        clearTimeout(t);
+                        sw.removeEventListener('message', on);
+                        done(e.data);
+                    };
+                    sw.addEventListener('message', on);
+                    try { worker.postMessage(msg); } catch (e) { clearTimeout(t); done(null); }
+                });
+            }
+
+            PX.ready = (function () {
+                if (!sw) return Promise.resolve({ ok: false, error: 'This browser has no service workers.' });
+                if (!self.isSecureContext) {
+                    return Promise.resolve({ ok: false, error: 'A service worker needs https, or localhost.' });
+                }
+                if (written) {
+                    // A written document may not touch its service worker
+                    // container at all -- every call throws InvalidStateError --
+                    // and does not need to: the frames it opens load real URLs,
+                    // which an installed worker claims by scope, and a frame
+                    // that gets there first is served this file by the host's
+                    // 404 page and installs the worker itself.
+                    return Promise.resolve({ ok: true });
+                }
+                return sw.register(BASE + 'sw.js', { scope: BASE }).then(active).then(function (reg) {
+                    return ask(sw.controller || reg.active, { __px: 'config', wisp: WISP });
+                }).then(function (reply) {
+                    // No reply means the page is not controlled, which the
+                    // frames do not need; a reply that says so does not.
+                    if (reply && !reply.ok) {
+                        return { ok: false, error: 'The worker is running but could not load libcurl.js.' };
+                    }
+                    return { ok: true };
+                }).catch(function (err) {
+                    return { ok: false, error: 'Could not start ' + BASE + 'sw.js: ' + ((err && err.message) || err) };
+                });
+            })();
+
+            // ------------------------------------------------ not the home page
+            // A static host serves this file for unknown paths, so a proxied URL
+            // lands here whenever no worker is controlling the page yet: install
+            // one, then reload so the worker answers the request instead. The UI
+            // sits this out -- see the end of the module below.
+            if (!home) {
+                card('Peekaboom', 'Starting the proxy…', location.href);
+                PX.ready.then(function (r) {
+                    if (r.ok) location.reload();
+                    else card('Error', 'Could not start the proxy', r.error + '\n' + location.href);
+                });
+            }
+        })();
+    </script>
+
+    <script type="module">
+        // The proxy is this page's own service worker, installed by the
+        // bootstrap above, so its address is wherever this file is served from.
+        // Settings can point at another Peekaboom -- a running index.js, or
+        // another copy of this deployment -- and keeps it in localStorage;
+        // ?proxy=https://proxy.example.com presets one. The address can include
+        // a path, since a static Peekaboom may live in a subdirectory.
+        const PX = window.__px;
+        const PROXY_KEY = 'knoiren_proxy_origin';
+        // Used until Settings says otherwise; clearing the field brings it back.
+        const DEFAULT_PROXY_ORIGIN = PX.proxy;
+        const PX_PREFIX = '/__px/';
+
+        // "proxy.example.com", "localhost:8787" or a full URL -> its origin, or '' if invalid.
+        function parseProxyOrigin(input) {
+            let s = String(input || '').trim();
+            if (!s) return '';
+            if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
+                const local = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|10\.|192\.168\.|0\.0\.0\.0)/i.test(s);
+                s = (local ? 'http://' : 'https://') + s;
+            }
+            try {
+                const u = new URL(s);
+                if (!/^https?:$/.test(u.protocol) || !u.hostname) return '';
+                return u.origin + u.pathname.replace(/\/+$/, '');
+            } catch (e) {
+                return '';
+            }
+        }
+
+        // The proxy's own origin, for postMessage and for checking who a message
+        // came from: those take an origin, never a path.
+        function proxySite() {
+            try { return new URL(PROXY_ORIGIN).origin; } catch (e) { return ''; }
+        }
+
+        let PROXY_ORIGIN = parseProxyOrigin(DEFAULT_PROXY_ORIGIN);
+        try {
+            const stored = localStorage.getItem(PROXY_KEY);
+            if (stored !== null) PROXY_ORIGIN = parseProxyOrigin(stored);
+        } catch (e) { }
+        {
+            // Read off the real URL: in a written-out window there is no search.
+            const preset = parseProxyOrigin(PX.here && PX.here.searchParams.get('proxy'));
+            if (preset) {
+                PROXY_ORIGIN = preset;
+                try { localStorage.setItem(PROXY_KEY, preset); } catch (e) { }
+            }
+        }
+
+        const NO_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAACVBMVEWVmqCRl5yYnqR1edwxAAAAA3RSTlMHiviNM9i0AAAA9ElEQVR42u2XMQ4DIQwEPfz/0alC47PHREJpbssTO7KBW5l41QjWFhy7VxKndkGY3RFud4T7zwl5fSaO/VTYkZ+uLffT97XM7/va7j/hAOZ+GJ6mtK9NIH4tYYPFbzudPk5L8AaypAAHYAXEmpcgN1ABCEB7oD9aB1SXa8t60KD4PwABeN4+J61UCEUJhAG2KAJzKWArnWpECECS5xiwJgDGwVFcfbwEiZ/fADEEEKEBigE0QBXgCe6A8wDtV/oPy1ePC9HMoE8GzwxkiFAC4s9ygA1JAsDHtA7Aqv1OwBLiaNS9Omw7gYsPDkdw89Hlz75XtT46qA3Em0wn6wAAAABJRU5ErkJggg==';
+        const NEWTAB_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAMAAAD04JH5AAAAZlBMVEUAAAC/v7/Hv7/Hv7fFv7/Fv7rDv7/Dv7vCv7zBv7zFv73Ev73Ev7vDv73Dv7vDv73Dv7vCv73Cv7vDv73Dv7zEv7zEv7zDv7zDv7zDv7zDv7vEv73Ev7zCv73Cv7zDv73Dv7zDv7xno0nKAAAAIXRSTlMAECAgMDBAQFBfYHBwf3+AgI+PkJCfoK+/z8/f39/f7+84OiXtAAAB70lEQVR42u3azU7jMBRA4cTpJGmZGf4cMNCS3Pd/SU4XlixD7BRY2NX9VhWkyllcNbbbRimlLtHD4hULRIAFDhY9NOD6Ag54h2x0xB4aUH9ABwf5piM6aECdAXsskB9aMEID6goYIb9sDw2oJ+Ad8ssWdNCAOgJuICtm3GGEuVALDagj4MxBIhYtmh/QgLIDJvjXAyTwF02gxQ49vorqEzSgzAB/w/CCZwhuEd74HgskMCF82FjIih4aUF7AIwRH+KEyeEG4WU0tVvx7fegMQcxCA8oLcBDEQ7eDf/0EyXiAv/4OgtgLNKC8gHBgFrSIHz6SEb93xNo1GlBegEQmfHpYbeQH10BWaED5AfHC4Q9kox4aUF/ADIk4NIgWGFktUoO7QAPKC3hF7pDZQjIm5BYwDhpQXsAjtmw2TpAVbzDIHXpbaEB5AQO2bDYM4uGaER9i/oes6KEBZQV4qQG7QbxRGbCDv7HXITWoDTSgzIADJOEfmqT8QcYeGlBuwJmDJBwxoYfBWYfwUCs3gBpQdoDBDLnAlkXIDAMNKD/g0h8yTdjyQTaigQbUEeAjZghyG5HUF1oz/M01oK6AM4MTtiwu7iERBx+oAXUGeAecsLa46BD/L4zTgPoDvAEWDiPCwwgHiwH+7xpwfQFKqav0AXlzhL6TK7MLAAAAAElFTkSuQmCC';
+        const FOLDER_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAABAklEQVR4AexUyQ3CQAyc5UUJFARF8IIHh5QOoADoIBLHI7woAgqiBF4sniUJWRPIIUACZRVnY8easSfxtvDh1RAUCvxdiXbrsBttwok2xgtLfZKQdhBtw4VtmQOMWWljvC5JSgCYPoATrJ16BruUOEjCInR32teFZAjQJtBwHKw9GwVzc7E9vgPMTHen/aQQxCtLEIcet8EkODoS3V2eTxVuajigUgTMJInXme409pkr5tSQHaUJmFzHGoJC1f5LojP71ZNZ1SeGmMOSPfub2r0EOnoyK/tAB3BYAoc7wTA5EvKms0KME08shy437yOXndZXE00MwU0vjyCNvvHh9wmuAAAA//96iR2uAAAABklEQVQDAMGKAUD79gyKAAAAAElFTkSuQmCC';
+        const STAR_OFF = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAMAAADXqc3KAAAAD1BMVEVdZGlfY2hfY2hfY2hfY2iYMCtaAAAABXRSTlMGNoPD+sanbjoAAAB7SURBVHjanZA5DgNBDMNkkf9/c4Ake8xiiiCsDAsspPxCmy2jsxd0r6juhXarYLJRppJgJwcF30wyvoEmQQXaTxVAJUmQLCDnMTkZ5FZtbv2bLMnmn3AFPNt9eQRyzI7r4s2gTOqsA6Ktsg6JyiSDSi7UHq7mgpte8h8vMyUB8jQkgkoAAAAASUVORK5CYII=';
+        const STAR_ON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAMAAADXqc3KAAAAD1BMVEUZcesac+gac+kac+gac+jfewgqAAAABXRSTlMDOX29+cHLqgQAAABbSURBVHjarc1JDgIxDETRGv79z8yCoUlwJCR4iyhWqWz9xNas1Qw0CuRQmCsGsDa2C1D7ysKHHJIcOlkOXyyNibUoD9WKF+mrVQHI/d2DWnL3oM852/W8f//tBqD4AlV8pJ2+AAAAAElFTkSuQmCC';
+        const ICON_FWD = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAAkElEQVR4AeyQUQrAIAxDt93/zpsPVigd1kbwawrBCmme5DoWnw0YFvyziu73DHtxhqmK4LiMdJQAZzuWVoVIAMIb4+RGFYgMIFiBdAH8LhMgEz6b490FROPsuwughkweiM+//dwFeFOcfSVZOHsyQAmXAWq4DGABjWrBY5IqIhjZcuWWAJXA6NmA2MjnvbyiBwAA//+OcqznAAAABklEQVQDAKZPSDHM2iJ9AAAAAElFTkSuQmCC';
+        const ICON_RELOAD = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAA6ElEQVR4AezTUQqDQAwE0LYXELyB9z+UNxA8QctbjMjiZv3xqxamyWaSmZDSz+vmz2PQPfCfnGie5++yLDu8wX1EnPwM3RMZHoZhn13X9eUNxHeikaQGIUB0HMc3TNNUohoTaGiXctOAuGFCREv39oXb0m5oGhA3XYur4UDeQ9PAoO3FGk5Vo+6Jd2pwZUvnghCsY2pQN5+9e0s0DeI82XYZF8s0DeLHteGZkBrOItEbosfYNNDkhyRAyB+OqAhqejJxfGqggQATeYjK1Swgz9A1MMyE2BFquB4uGfREMv4xyK5TuNtP9AMAAP//Bkw8dgAAAAZJREFUAwDUanox3hqaEAAAAABJRU5ErkJggg==';
+        const ICON_COLLAPSE = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAABCUlEQVR4AexRSw6CMBCdoh5BTyEoJrpzod7ZnRcQMUAMegONFzARQ53XAKmkgIkaN5BOO515n2aw6Mdfa9A44HZE3xuR67r90XiyRSBvVM4Ab/0DCKZkbUiIKQI5aplG7dFoACEIsopNgg4qiGzU0ON67ao1gACEWMGmlE7ykawQyFFDDxjOK1elgeM4AwgwU4nfu7SMouiKSBJroZsAyzjjMhqAILq9DTMK8aPvn/muVhx7F90EWHBUs7QZDUSntyZJQ7wSL9fFc/6LCWMVJ29qp9GApLiRlF6VeM4vTBirOHlDO40GYbCbh8F+Znq5xlUpTIAFRxVKm9GghPno2ho0jq8d0f9H9AQAAP//N0iYjwAAAAZJREFUAwAnwXoxn+SR2AAAAABJRU5ErkJggg==';
+        const GAMES_ICON = 'data:image/png;base64,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';
+        const SITE_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAmQAAAJkAQMAAACF36//AAAABlBMVEUAAADi4uTELgoOAAAAAXRSTlMAQObYZgAABoRJREFUeNrsl0GOqzAQRLG88JIjcBQfzRyNo3AEpL9hgai/QeqANe6xu8eZifotE/wS4+oiGQzDMAzDMAzDMAzDMAzDMAzDMAzDMAyjQFoGAQ7DKx6bxBawDi+MOCW2iH14YQJmgQ047nLJVgPuW0tkb2ACcP+qkq2m+2oHAGurzAPAcrMJtjqSjexozsdjZwFtW6WNYXva9tZ8kI12DrTnA9gzW9vk47I99Nga8/FIRKRX6qB9nZntbL9twG00mo8hZmtx0TKq+VpcLBo2J7DR2uyVtd1Ga73Alq8NuNgEtk1uo7U0WqOqbdKwHZltb7fRWMbfZwMNvaYNGqeAWc9Gg+pUbV7HtqratlxfjVe2PeI16tgOGlNp99JoJcifCxRfyG202inY6FCDgo2OIYpsA4h/uDHLbPhsW+pkGz7MFvvYTrOVmPrYjk+zjX1s+6fZgtnM1tP2F6de13bq2lS7F++3xU6/3xZV26r6u3cT/PtQGVQPKA5DABTjO+JrZHGTBy4BioFDgVXVtkkCIg9cQIFDMyA4VW2QdKU8cBFgAxcgDy8Fjo+xXyhuTOBGPnjxpHZjAgc+eMBK4S0GbmKCd1kovKWIOC54l2Vn4wasV4T40GLmAgIc7jvBm667AhaycaFdAr7JwtgIuS2hjrWjDZVs/Wzuvba9n82jkqOfLbzXdrbY6B3Wxj+T568fsPW2vRCe+if8zLxXZTsoPWIbtU6qtcXSgrG2fGMpoL7WloqlU1u+qfjpUcFWSCNTl+W5DgJb3oeuzuaYG5Oqytcx8YxiW6EUmLr0TIEFgS2/2lXZAndmVeUbuKwnoW3hWqGqyAsXsDZuI6HGNnFH5gW2POpOYsuHWmLLyzAJbHntR5Ftzq6Q2IYftY0VkzWx14YK28j2jf/f3hnkOA4CUdSIBUuOwEVG8tHw0XwUH8FLL6L0bDJCcjR+/J5SSHrqLyN4ElRhA1XlYIumjM/pYEqbLlrgrOxI2wXahruBTXgvrLiLWoU34HJB490g08qFu9GsgNnhLDMzTTifZhxHEs71CceRhNuVgLSoXGBWWjZBuaqdkaZcSmdsrFyYJ422KNGYjWZ2AlWFdpNujVdocBAtK7SNaEmhLUQLZLIiXeXXftpdu7yHiT2YlvtpO9NSP21lWoB5SVoEpJ8mxFCMaOV6GUZwEJGmxciyKS310o4u2nXzoNGiKS300vYBNGiu0aYxtO2/oQ2wAg2lOs1pTnOa05wGtJe9s+ob0z7iXQ+0A0ncPHwE7Sbsos1pN6yvZEU+Zz30eloCmnauz3AS11JpSzdts6BJ7jvT7YrkcJVoTYrzMo3NEPHGTDFDRppihoI3jYoZKtOa2AhIE8wQ+fZYMENmmmCGwrfughlmpglmEKIVbIYo0NgMWYjysBkK0ZKSQ185OiaYQYjcsRmiQGMzJCHiyZu4IsR22aizTLuBSYUoNriIEGFnWhCi/+xwEWlBo3HWBDiRkq+RFBqOIys0bFsEWralcQaRQuPsJpXGmVc6jbPCmIYZa7bZdMMz/TgLcXyGpH325gEOMijrlTNy9fzeFbKFX5PJzFnWozLA9ez08ZnznNVvX3GgV0MUoImVGgOqSMwqXOyrb+wrg+yrluwrqqJM+9S6tneuB5zG0nbT+tP9Y2tj5SpgE9p9mjtopXv2Y3tYAu2IOMJH057LvAWt8fBNqmF/OHjueBDlrvr6L3yYPCgYIAsP/w49yzPhneqfme1aUL84HrB1f4GBlb963Hi1/XLF0K9qJHA3TRHcTVMAmihwXlEV3E3TbEor4G52Djf6i0YRHGTIl6DY4fbhX9CaTWkFnpVWDrcMo7H7TsNp8RNp9+/QgtOcNpDW9NNo8UW05YfR0otoq9MulF9E25z2rd3g/qNpd6AJe/KVMiP16kwLWus9G9H2No9I45PRCrm1Gm2BvF+NxhnOOm2yod0NaM+dG96CNpvQDkNaW+TFlJaB1rcZ3Axp7fWZ3o7WNljRxAqN/3a01hfWqUirOu2ibzV4kre+s0676FsM3s57oxnskRot67SLvsng9LG2XwzOp+vFf5gKehpXRJOyUdsPoeF1padZaitNV3jqDCsBhnqe89qsoiufaXMbua54Hlg50TXVJ1pbGrrKybsy+AcPdbv4Z2tRJxNG3T8u/vI7gH/wcjiZZfoXnRyiwEBB8za5XC6Xy+VyuVwul8vlcrlcLpfL5XK5XC6Xy/V3/QYJyJa4mNbwPQAAAABJRU5ErkJggg==';
+
+        // Internal page, shown in the URL bar and accepted as a typed address.
+        const SETTINGS_URL = 'knoiren://settings';
+        const SETTINGS_RE = /^knoiren:\/\/settings\/?$/i;
+
+        const SETTINGS_ICON = 'data:image/svg+xml,' + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e8e8e8" ' +
+            'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+            '<circle cx="12" cy="12" r="3.1"/>' +
+            '<path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 ' +
+            '1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 ' +
+            '1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 ' +
+            '4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 ' +
+            '0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 ' +
+            '2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>' +
+            '</svg>'
+        );
+
+        const GAMES = [
+            ['3kh0 (Echo) Games', 'https://lite.3kh0.net/'],
+            ['RETRO GAMES', 'https://theooofficial.github.io/myRETROGAMES/'],
+            ['Bin Bash Games', 'https://bidoofery.github.io/gfiles/list.html'],
+            ['Native Games', 'https://bidoofery.github.io/nativegames/'],
+            ['GAMEBOY Advance Games', 'https://bidoofery.github.io/gam3b0y/'],
+            ['GBA Online Games', 'https://gba.js.org/'],
+            ['OutRed Games', 'https://outred.org/games.html'],
+            ['GBA Emulator Games', 'https://theclashman2.github.io/GBA-Emulator/'],
+            ['Unblocked Games World', 'https://sites.google.com/site/thegamecompilation/home?authuser=0'],
+            ['Now.gg Games', 'https://now.gg/'],
+            ['Dancing Bunny Games', 'https://ltorl.github.io/dancing-bunny/v2.html'],
+        ];
+
+        function esc(s) {
+            return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        }
+
+        function strHash(s) {
+            let h = 2166136261;
+            for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+            return h >>> 0;
+        }
+
+        const BRANDS = {
+            'duckduckgo.com': ['#de5833', 'D'],
+            'wikipedia.org': ['#eaecf0', 'W', '#202122'],
+            'github.com': ['#24292f', 'G'],
+            'reddit.com': ['#ff4500', 'r'],
+            'youtube.com': ['#ff0000', '▶'],
+            'example.com': ['#38488f', 'E'],
+            'news.ycombinator.com': ['#ff6600', 'Y'],
+        };
+
+        function brandFor(host) {
+            host = (host || '').replace(/^www\./, '');
+            for (const k in BRANDS) {
+                if (host === k || host.endsWith('.' + k)) return BRANDS[k];
+            }
+            const hue = strHash(host) % 360;
+            return [`hsl(${hue} 62% 46%)`, (host.split('.')[0][0] || '?').toUpperCase()];
+        }
+
+        // Letter icon for default bookmarks, so they render before any site is visited.
+        function letterIcon(host) {
+            const [bg, letter, fg] = brandFor(host);
+            return 'data:image/svg+xml,' + encodeURIComponent(
+                `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="${bg}"/>` +
+                `<text x="16" y="22.5" font-family="Arial,Helvetica,sans-serif" font-weight="700" font-size="18" text-anchor="middle" fill="${fg || '#fff'}">${esc(letter)}</text></svg>`
+            );
+        }
+
+        // ---- Frames -------------------------------------------------------------
+        // Each tab is an iframe on the proxy's origin. Being cross-origin, it talks
+        // to us only through the runtime's messages: { __px: 'nav', url, title, icon }
+        // on every navigation and { __px: 'open', url, user } for new windows.
+
+        function createFrame() {
+            const frame = document.createElement('iframe');
+            frame.setAttribute('allow', 'fullscreen; autoplay; clipboard-read; clipboard-write; encrypted-media; picture-in-picture; gamepad');
+            const listeners = { urlchange: [], open: [] };
+            return {
+                frame,
+                addEventListener(type, fn) {
+                    (listeners[type] = listeners[type] || []).push(fn);
+                },
+                emit(type, ev) {
+                    (listeners[type] || []).forEach(fn => { try { fn(ev); } catch (e) { console.error(e); } });
+                },
+                go(url) { if (PROXY_ORIGIN) frame.src = engine.encodeUrl(url); },
+            };
+        }
+
+        window.addEventListener('message', (e) => {
+            if (e.origin !== proxySite() || !e.data || typeof e.data.__px !== 'string') return;
+            // A page talking to us is proof the proxy works, whatever the probe said.
+            if (!engineReady) markProxyReady();
+            const tab = tabs.find(t => t.sframe && t.sframe.frame.contentWindow === e.source);
+            if (!tab) return;
+            const d = e.data;
+            if (d.__px === 'nav') {
+                // Tell the page we handle its new windows as tabs.
+                e.source.postMessage({ __px: 'host' }, proxySite());
+                // A new document starts unmuted, so a muted tab says it again.
+                if (tab.muted) e.source.postMessage({ __px: 'mute', muted: true }, proxySite());
+                setTabAudible(tab, !!d.audible);
+                tab.sframe.emit('urlchange', { url: String(d.url || ''), title: String(d.title || ''), icon: String(d.icon || '') });
+            } else if (d.__px === 'hello') {
+                if (tab.muted) e.source.postMessage({ __px: 'mute', muted: true }, proxySite());
+            } else if (d.__px === 'audio') {
+                setTabAudible(tab, !!d.audible);
+            } else if (d.__px === 'open') {
+                tab.sframe.emit('open', { url: String(d.url || ''), user: !!d.user });
+            }
+        });
+
+
+        // Peekaboom, the proxy in index.js, runs on its own origin so proxied sites
+        // never share an origin with this page.
+        const engine = {
+            get prefix() { return PROXY_ORIGIN + PX_PREFIX; },
+            encodeUrl: (u) => PROXY_ORIGIN + PX_PREFIX + u,
+            decodeUrl: (u) => u.slice(u.indexOf(PX_PREFIX) + PX_PREFIX.length),
+            createFrame,
+        };
+        let engineReady = false;
+        let engineFailed = false;
+        let engineError = '';
+
+        // Only checks that the proxy answers; tabs load either way. Runs at startup
+        // and again whenever settings is shown while the proxy isn't known to work.
+        async function initProxy() {
+            const origin = PROXY_ORIGIN;
+            if (!origin) { renderAllSettings(); return; }
+            if (origin === PX.proxy) {
+                // The built-in proxy: its own worker says whether it installed,
+                // which a request to the static page it is served by would not.
+                const r = await PX.ready;
+                if (origin !== PROXY_ORIGIN || engineReady) return;
+                if (r.ok) { markProxyReady(); return; }
+                engineFailed = true;
+                engineError = r.error || '';
+                console.error('The built-in proxy did not start', r.error);
+                renderAllSettings();
+                return;
+            }
+            try {
+                await fetch(origin + '/', { mode: 'no-cors', cache: 'no-store' });
+                // The proxy may have been changed while this was in flight.
+                if (origin === PROXY_ORIGIN) markProxyReady();
+                return;
+            } catch (err) {
+                if (origin !== PROXY_ORIGIN || engineReady) return;
+                engineFailed = true;
+                console.error('Proxy unreachable at ' + origin, err);
+            }
+            renderAllSettings();
+        }
+
+        // Saves a new proxy address, reloads open sites through it, and resumes
+        // navigations that were waiting for one.
+        function setProxyOrigin(origin) {
+            const changed = origin !== PROXY_ORIGIN;
+            PROXY_ORIGIN = origin;
+            try {
+                if (origin) localStorage.setItem(PROXY_KEY, origin);
+                else localStorage.removeItem(PROXY_KEY);
+            } catch (e) { }
+            engineReady = false;
+            engineFailed = false;
+            engineError = '';
+            if (origin) {
+                tabs.forEach(t => {
+                    if (t.pendingNav) {
+                        const q = t.pendingNav;
+                        t.pendingNav = null;
+                        navigateTab(t, q);
+                    } else if (changed && t.type === 'web' && t.sframe && t.url) {
+                        t.sframe.go(t.url);
+                    }
+                });
+            }
+            renderAllSettings();
+            initProxy();
+        }
+        function markProxyReady() {
+            engineReady = true;
+            engineFailed = false;
+            engineError = '';
+            renderAllSettings();
+        }
+
+        // Closing or reloading the whole page throws away every tab, so the browser
+        // is asked to confirm first.
+        // The bootstrap reloads the page when a static host served this file in
+        // place of a proxied URL, so the prompt is only armed on the UI itself.
+        if (PX.home) {
+            window.addEventListener('beforeunload', (e) => {
+                e.preventDefault();
+                // Older browsers need one of these; the text itself is always ignored.
+                e.returnValue = '';
+                return '';
+            });
+        }
+
+        function decodeRealUrl(u) {
+            try {
+                if (typeof u !== 'string') u = String(u);
+                if (u.includes(engine.prefix)) return engine.decodeUrl(u);
+                return u;
+            } catch (e) {
+                return u;
+            }
+        }
+
+        function proxyUrl(u) {
+            try {
+                if (!u) return null;
+                if (typeof u !== 'string') u = String(u);
+                if (u.startsWith('data:') || u.startsWith('blob:')) return u;
+                if (u.includes(engine.prefix)) return u;
+                return engine.encodeUrl(u);
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function normalizeUrl(query) {
+            query = (query || '').trim();
+            if (!query) return null;
+            const isUrl = query.includes('.') && !query.includes(' ');
+            if (!isUrl) return `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
+            if (!/^https?:\/\//i.test(query)) return 'https://' + query;
+            return query;
+        }
+
+        // There is no /suggest endpoint without the UI server. Google's suggestions
+        // answer as JSONP, which a <script> can load cross-origin: through the
+        // proxy when one is set, directly if that fails.
+        let jsonpSeq = 0;
+        function jsonp(src) {
+            return new Promise((resolve, reject) => {
+                const cb = '__knoirenSuggest' + (++jsonpSeq);
+                const s = document.createElement('script');
+                let finished = false;
+                const done = (data, err) => {
+                    if (finished) return;
+                    finished = true;
+                    clearTimeout(timer);
+                    delete window[cb];
+                    s.remove();
+                    err ? reject(err) : resolve(data);
+                };
+                const timer = setTimeout(() => done(null, new Error('timeout')), 4000);
+                window[cb] = (data) => done(data);
+                s.onload = () => setTimeout(() => done(null, new Error('no data')), 0);
+                s.onerror = () => done(null, new Error('load failed'));
+                s.referrerPolicy = 'no-referrer';
+                s.src = src + '&callback=' + cb;
+                document.head.appendChild(s);
+            });
+        }
+
+        async function fetchSuggestions(query) {
+            query = (query || '').trim().slice(0, 200);
+            if (!query) return [];
+            const api = 'https://suggestqueries.google.com/complete/search?client=firefox&q=' + encodeURIComponent(query);
+            // The built-in proxy is no use to a written page: nothing controls
+            // it, so the request would go straight to the static host.
+            const viaProxy = PROXY_ORIGIN && !(PX.written && PROXY_ORIGIN === PX.proxy);
+            const sources = viaProxy ? [PROXY_ORIGIN + PX_PREFIX + api, api] : [api];
+            for (const src of sources) {
+                try {
+                    const data = await jsonp(src);
+                    return Array.isArray(data) && Array.isArray(data[1])
+                        ? data[1].filter(x => typeof x === 'string').slice(0, 8) : [];
+                } catch (e) { }
+            }
+            return [];
+        }
+
+        function attachSuggestions(input, box, onPick, positionBox, urlMode) {
+            let items = [];
+            let kbSel = -1;
+            let seq = 0;
+            let timer = null;
+
+            function hide() { box.classList.remove('open'); box.innerHTML = ''; items = []; kbSel = -1; }
+
+            function highlight(i) {
+                [...box.children].forEach((c, idx) => c.classList.toggle('active', idx === i));
+            }
+
+            function choose(i) {
+                const it = items[i];
+                if (!it) return;
+                hide();
+                onPick(it.query);
+            }
+
+            function render(list) {
+                items = list;
+                kbSel = -1;
+                box.innerHTML = '';
+                if (!list.length || document.activeElement !== input) { hide(); return; }
+                list.forEach((it, i) => {
+                    const el = document.createElement('div');
+                    el.className = 'suggest-item' + (it.cls ? ' ' + it.cls : '');
+                    el.textContent = it.label;
+                    el.addEventListener('mousedown', (e) => { e.preventDefault(); choose(i); });
+                    el.addEventListener('mouseenter', () => highlight(i));
+                    box.appendChild(el);
+                });
+                if (positionBox) positionBox();
+                box.classList.add('open');
+            }
+
+            const looksLikeUrl = (q) => q.includes('.') && !q.includes(' ');
+
+            function urlItems(q) {
+                return [
+                    { label: q, query: q, cls: 'open-link' },
+                    { label: q + ' - DuckDuckGo Search', query: `https://duckduckgo.com/?q=${encodeURIComponent(q)}` },
+                ];
+            }
+
+            input.addEventListener('input', () => {
+                const q = input.value.trim();
+                clearTimeout(timer);
+                if (!q) { hide(); return; }
+                if (urlMode && looksLikeUrl(q)) { render(urlItems(q)); return; }
+                const my = ++seq;
+                timer = setTimeout(async () => {
+                    const list = await fetchSuggestions(q);
+                    if (my === seq) render(list.map(s => ({ label: s, query: s })));
+                }, 120);
+            });
+
+            input.addEventListener('keydown', (e) => {
+                const open = box.classList.contains('open');
+                if (e.key === 'ArrowDown' && open) { e.preventDefault(); kbSel = Math.min(kbSel + 1, items.length - 1); highlight(kbSel); }
+                else if (e.key === 'ArrowUp' && open) { e.preventDefault(); kbSel = Math.max(kbSel - 1, 0); highlight(kbSel); }
+                else if (e.key === 'Escape') { hide(); }
+                else if (e.key === 'Enter') {
+                    e.preventDefault();
+                    if (open && kbSel >= 0) choose(kbSel);
+                    else { hide(); onPick(input.value); }
+                }
+            });
+
+            box.addEventListener('mouseleave', () => highlight(kbSel));
+            input.addEventListener('blur', () => setTimeout(hide, 120));
+        }
+
+        const tabsEl = document.getElementById('tabs');
+        const contentEl = document.getElementById('content');
+        const urlInput = document.getElementById('url-input');
+
+        let tabs = [];
+        let activeId = null;
+        let tabSeq = 0;
+
+        function activeTab() {
+            return tabs.find(t => t.id === activeId) || null;
+        }
+
+        function tabsMinWidth(extra = 0) {
+            let w = extra * 100;
+            for (const t of tabs) w += t.pinned ? 36 : 100;
+            const seps = tabs.length + extra - 1;
+            if (seps > 0) w += seps * 5;
+            return w;
+        }
+
+        function tabStripHasRoom() {
+            if (tabs.length === 0) return true;
+            const bar = document.getElementById('tabbar');
+            const btn = document.getElementById('newtab-btn');
+            if (!bar || !bar.clientWidth) return true;
+            const cs = getComputedStyle(bar);
+            const padX = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight);
+            const btnW = btn ? btn.offsetWidth + 8 : 0;
+            const avail = bar.clientWidth - padX - btnW;
+            return tabsMinWidth(1) <= avail;
+        }
+
+        function createTab(opts = {}) {
+            if (!tabStripHasRoom()) {
+                const cur = tabs.find(t => t.id === activeId);
+                if (opts.url && cur) {
+                    navigateTab(cur, opts.url);
+                    return cur;
+                }
+                return null;
+            }
+
+            const id = ++tabSeq;
+            const panel = document.createElement('div');
+            panel.className = 'panel';
+            contentEl.appendChild(panel);
+
+            const tab = {
+                id,
+                type: 'newtab',
+                title: 'New tab',
+                url: '',
+                favicon: NEWTAB_ICON,
+                panel,
+                sframe: null,
+                newtabEl: null,
+                settingsEl: null,
+                hist: [],
+                histPtr: -1,
+                suppress: false,
+            };
+            tabs.push(tab);
+            const animateOpen = tabs.length > 1;
+            buildNewtab(tab);
+            activateTab(id);
+            renderTabs();
+            if (animateOpen) animateTabOpen(tab);
+
+            if (opts.url) navigateTab(tab, opts.url);
+            return tab;
+        }
+
+        function closeTab(id, opts = {}) {
+            const animate = opts.animate !== false;
+            const idx = tabs.findIndex(t => t.id === id);
+            if (idx === -1) return;
+            const tab = tabs[idx];
+            if (tab._closing) return;
+            const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            if (!animate || reduce || !tab.el || tabs.length === 1) {
+                removeTab(tab);
+                return;
+            }
+
+            if (activeId === id) {
+                const next = tabs[idx + 1] || tabs[idx - 1];
+                if (next) activateTab(next.id);
+            }
+
+            const el = tab.el;
+            const ANIM = 260;
+            const startW = el.getBoundingClientRect().width;
+            tab._closing = true;
+            tab._animatingLabel = true;
+            el.style.pointerEvents = 'none';
+            el.classList.add('label-anim', 'closing');
+            el.style.overflow = 'hidden';
+            el.style.zIndex = '-1';
+            el.style.minWidth = '0px';
+            el.style.transition = 'none';
+            el.style.width = startW + 'px';
+            el.style.flex = '0 0 ' + startW + 'px';
+            el.style.padding = '0 10px';
+
+            const sep = idx > 0
+                ? sepEls.get(tab.id)
+                : (tabs[idx + 1] ? sepEls.get(tabs[idx + 1].id) : null);
+            if (sep) {
+                sep.style.transition = 'none';
+                sep.style.flex = '0 0 1px';
+                sep.style.width = '1px';
+                sep.style.margin = '0 2px';
+                sep.style.opacity = '1';
+            }
+
+            requestAnimationFrame(() => {
+                el.style.transition = `width ${ANIM}ms ease, flex-basis ${ANIM}ms ease, padding ${ANIM}ms ease`;
+                el.style.width = '0px';
+                el.style.flex = '0 0 0px';
+                el.style.padding = '0';
+                if (sep) {
+                    sep.style.transition = `width ${ANIM}ms ease, flex-basis ${ANIM}ms ease, margin ${ANIM}ms ease, opacity ${ANIM}ms ease`;
+                    sep.style.width = '0px';
+                    sep.style.flex = '0 0 0px';
+                    sep.style.margin = '0';
+                    sep.style.opacity = '0';
+                }
+            });
+            labelTypewriter(tab, 0, startW, ANIM);
+            setTimeout(() => removeTab(tab), ANIM + 40);
+        }
+
+        function removeTab(tab) {
+            const idx = tabs.findIndex(t => t.id === tab.id);
+            if (idx === -1) return;
+            if (tab.sframe && tab.sframe.dispose) tab.sframe.dispose();
+            if (tab.panel) tab.panel.remove();
+            tabs.splice(idx, 1);
+            if (tabs.length === 0) {
+                createTab();
+                return;
+            }
+            if (activeId === tab.id) {
+                const next = tabs[Math.min(idx, tabs.length - 1)];
+                activateTab(next.id);
+            }
+            renderTabs();
+        }
+
+        function activateTab(id) {
+            activeId = id;
+            tabs.forEach(t => t.panel.classList.toggle('active', t.id === id));
+            renderTabs();
+            syncToolbar();
+        }
+
+        function buildTabEl(tab) {
+            const el = document.createElement('div');
+            el.className = 'tab';
+
+            const fav = document.createElement('img');
+            fav.className = 'favicon';
+            fav.addEventListener('error', () => { if (fav.getAttribute('src') !== NO_ICON) fav.src = NO_ICON; });
+
+            const title = document.createElement('span');
+            title.className = 'tab-title';
+
+            const audio = document.createElement('span');
+            audio.className = 'tab-audio';
+            audio.addEventListener('click', (e) => { e.stopPropagation(); setTabMuted(tab, !tab.muted); });
+
+            const close = document.createElement('span');
+            close.className = 'tab-close';
+            close.textContent = '×';
+            close.addEventListener('click', (e) => { e.stopPropagation(); closeTab(tab.id); });
+
+            el.append(fav, title, audio, close);
+            fav.draggable = false;
+            el.addEventListener('click', () => {
+                if (suppressTabClick) { suppressTabClick = false; return; }
+                activateTab(tab.id);
+            });
+            el.addEventListener('pointerdown', (e) => onTabPointerDown(tab, e));
+            el.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openTabMenu(e.clientX, e.clientY, tab);
+            });
+
+            tab.el = el;
+            tab.favEl = fav;
+            tab.titleEl = title;
+            tab.audioEl = audio;
+            tab.closeEl = close;
+            return el;
+        }
+
+        let dragState = null;
+        let suppressTabClick = false;
+        const DRAG_THRESHOLD = 5;
+
+        function onTabPointerDown(tab, e) {
+            if (e.button !== 0) return;
+            if (e.target.closest && e.target.closest('.tab-close, .tab-audio')) return;
+            suppressTabClick = false;
+            const rect = tab.el.getBoundingClientRect();
+            dragState = {
+                tab,
+                pointerId: e.pointerId,
+                startX: e.clientX,
+                grabOffset: e.clientX - rect.left,
+                started: false,
+            };
+        }
+
+        function onDragMove(e) {
+            if (!dragState || e.pointerId !== dragState.pointerId) return;
+
+            if (!dragState.started) {
+                if (Math.abs(e.clientX - dragState.startX) < DRAG_THRESHOLD) return;
+                dragState.started = true;
+                suppressTabClick = true;
+                dragState.tab.el.classList.add('dragging');
+                try { dragState.tab.el.setPointerCapture(dragState.pointerId); } catch (_) { }
+            }
+
+            e.preventDefault();
+            reorderByPointer(e.clientX);
+            positionDragged(e.clientX);
+        }
+
+        function reorderByPointer(pointerX) {
+            const dragId = dragState.tab.id;
+            const siblings = tabs.filter(t => t.id !== dragId);
+            let newIndex = siblings.length;
+            for (let i = 0; i < siblings.length; i++) {
+                const r = siblings[i].el.getBoundingClientRect();
+                if (pointerX < r.left + r.width / 2) { newIndex = i; break; }
+            }
+            const order = siblings.slice();
+            order.splice(newIndex, 0, dragState.tab);
+            const changed = order.some((t, i) => t.id !== tabs[i].id);
+            if (!changed) return;
+
+            const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            const first = new Map();
+            if (!reduce) {
+                siblings.forEach(t => {
+                    t.el.style.transition = 'none';
+                    t.el.style.transform = '';
+                    first.set(t.id, t.el.getBoundingClientRect().left);
+                });
+            }
+
+            tabs = order;
+            renderTabs();
+            try { dragState.tab.el.setPointerCapture(dragState.pointerId); } catch (_) { }
+
+            if (reduce) return;
+            siblings.forEach(t => {
+                const prev = first.get(t.id);
+                if (prev == null) return;
+                const dx = prev - t.el.getBoundingClientRect().left;
+                if (Math.abs(dx) < 0.5) return;
+                const el = t.el;
+                el.style.transition = 'none';
+                el.style.transform = `translateX(${dx}px)`;
+                requestAnimationFrame(() => {
+                    el.style.transition = 'transform 160ms ease';
+                    el.style.transform = '';
+                });
+            });
+        }
+
+        function positionDragged(pointerX) {
+            const el = dragState.tab.el;
+            const containerRect = tabsEl.getBoundingClientRect();
+            el.style.transform = '';
+            const naturalLeft = el.getBoundingClientRect().left;
+            let desiredLeft = pointerX - dragState.grabOffset;
+            desiredLeft = Math.max(containerRect.left, Math.min(desiredLeft, containerRect.right - el.offsetWidth));
+            el.style.transform = `translateX(${desiredLeft - naturalLeft}px)`;
+        }
+
+        function onDragEnd(e) {
+            if (!dragState || (e && e.pointerId !== dragState.pointerId)) return;
+            const el = dragState.tab.el;
+            if (dragState.started) {
+                el.classList.remove('dragging');
+                tabs.forEach(t => { t.el.style.transition = ''; t.el.style.transform = ''; });
+                try { el.releasePointerCapture(dragState.pointerId); } catch (_) { }
+                renderTabs();
+            }
+            dragState = null;
+        }
+
+        window.addEventListener('pointermove', onDragMove);
+        window.addEventListener('pointerup', onDragEnd);
+        window.addEventListener('pointercancel', onDragEnd);
+
+        function updateTabEl(tab) {
+            if (!tab.el) buildTabEl(tab);
+            const t = tab.title || 'New tab';
+            if (tab.el.title !== t) tab.el.title = t;
+            const icon = tab.favicon || NO_ICON;
+            if (tab.favEl.getAttribute('src') !== icon) tab.favEl.src = icon;
+            tab.el.classList.toggle('active', tab.id === activeId);
+            tab.el.classList.toggle('pinned', !!tab.pinned);
+            const sound = tab.pinned ? '' : tab.muted ? 'muted' : tab.audible ? 'on' : '';
+            if (tab.audioEl.dataset.sound !== sound) {
+                tab.audioEl.dataset.sound = sound;
+                tab.audioEl.innerHTML = sound ? (sound === 'muted' ? SPEAKER_MUTED_SVG : SPEAKER_SVG) : '';
+                tab.audioEl.title = sound === 'muted' ? 'Unmute tab' : sound ? 'Mute tab' : '';
+            }
+            tab.el.classList.toggle('has-audio', !!sound);
+            if (!tab._animatingLabel) {
+                const wantTitle = tab.pinned ? '' : t;
+                if (tab.titleEl.textContent !== wantTitle) tab.titleEl.textContent = wantTitle;
+                tab.closeEl.style.display = tab.pinned ? 'none' : '';
+            }
+        }
+
+        const SPEAKER_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6h2.5l3.5-3v10l-3.5-3h-2.5z" fill="currentColor"/><path d="M11 5.5a3.5 3.5 0 0 1 0 5M12.8 3.5a6.2 6.2 0 0 1 0 9"/></svg>';
+        const SPEAKER_MUTED_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6h2.5l3.5-3v10l-3.5-3h-2.5z" fill="currentColor"/><path d="M11 6l4 4M15 6l-4 4"/></svg>';
+
+        // Muting is kept per tab and sent to the page again after every navigation.
+        function setTabMuted(tab, muted) {
+            tab.muted = !!muted;
+            const w = tab.sframe && tab.sframe.frame.contentWindow;
+            if (w) { try { w.postMessage({ __px: 'mute', muted: tab.muted }, proxySite()); } catch (e) { } }
+            updateTabEl(tab);
+        }
+
+        function setTabAudible(tab, audible) {
+            if (tab.audible === audible) return;
+            tab.audible = audible;
+            updateTabEl(tab);
+        }
+
+        const sepEls = new Map();
+
+        function renderTabs() {
+            tabs.forEach(updateTabEl);
+            const seq = [];
+            const seen = new Set();
+            tabs.forEach((tab, i) => {
+                if (i > 0) {
+                    let sep = sepEls.get(tab.id);
+                    if (!sep) { sep = document.createElement('div'); sepEls.set(tab.id, sep); }
+                    sep.className = 'tab-sep';
+                    if (tab.id === activeId || tabs[i - 1].id === activeId) sep.classList.add('hidden');
+                    seen.add(tab.id);
+                    seq.push(sep);
+                }
+                seq.push(tab.el);
+            });
+            for (const id of sepEls.keys()) { if (!seen.has(id)) sepEls.delete(id); }
+
+            const desired = new Set(seq);
+            Array.from(tabsEl.childNodes).forEach(n => { if (!desired.has(n)) tabsEl.removeChild(n); });
+            let ref = tabsEl.firstChild;
+            for (const node of seq) {
+                if (ref === node) { ref = ref.nextSibling; }
+                else { tabsEl.insertBefore(node, ref); }
+            }
+        }
+
+        function buildNewtab(tab) {
+            const nt = document.createElement('div');
+            nt.className = 'newtab';
+
+            const title = document.createElement('h1');
+            title.className = 'nt-title';
+            title.textContent = 'Knoiren Browser';
+
+            const group = document.createElement('div');
+            group.className = 'nt-input-group';
+            const input = document.createElement('input');
+            input.className = 'nt-input';
+            input.setAttribute('aria-label', 'Search with DuckDuckGo or enter URL');
+            input.spellcheck = false;
+            const go = document.createElement('button');
+            go.className = 'nt-go';
+            go.title = 'Search';
+            go.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="10" cy="10" r="7"/><path d="M15.2 15.2 21 21"/></svg>';
+            group.append(input, go);
+
+            const go2 = () => { if (input.value.trim()) navigateTab(tab, input.value); };
+            go.addEventListener('click', go2);
+
+            const search = document.createElement('div');
+            search.className = 'nt-search';
+            const suggest = document.createElement('div');
+            suggest.className = 'nt-suggest';
+            search.append(group, suggest);
+            attachSuggestions(input, suggest, (val) => navigateTab(tab, val));
+
+            const github = document.createElement('a');
+            github.className = 'nt-github';
+            github.href = 'https://github.com/ltorl/knoiren-browser/tree/main';
+            github.textContent = 'Github';
+            // Opens as a Knoiren tab, not a tab of the real browser.
+            const openGithub = (e) => {
+                if (e.button > 1) return;
+                e.preventDefault();
+                createTab({ url: github.href });
+            };
+            github.addEventListener('click', openGithub);
+            github.addEventListener('auxclick', openGithub);
+
+            nt.append(title, search, github);
+            tab.panel.appendChild(nt);
+            tab.newtabEl = nt;
+        }
+
+        function showNewtab(tab) {
+            if (tab.newtabEl) tab.newtabEl.style.display = '';
+            if (tab.settingsEl) tab.settingsEl.style.display = 'none';
+            if (tab.noproxyEl) tab.noproxyEl.style.display = 'none';
+            if (tab.sframe) tab.sframe.frame.style.display = 'none';
+        }
+
+        function showFrame(tab) {
+            if (tab.newtabEl) tab.newtabEl.style.display = 'none';
+            if (tab.settingsEl) tab.settingsEl.style.display = 'none';
+            if (tab.noproxyEl) tab.noproxyEl.style.display = 'none';
+            if (tab.sframe) tab.sframe.frame.style.display = '';
+        }
+
+        // --- Settings page (knoiren://settings) ---------------------------------
+
+        function settingsSection(title) {
+            const h = document.createElement('div');
+            h.className = 'set-group';
+            h.textContent = title;
+            return h;
+        }
+
+        function buildProxySection(inner, tab) {
+            inner.appendChild(settingsSection('Proxy'));
+
+            const form = document.createElement('form');
+            form.className = 'set-field';
+            const input = document.createElement('input');
+            input.className = 'set-input set-proxy-input';
+            input.type = 'text';
+            input.spellcheck = false;
+            input.autocomplete = 'off';
+            input.setAttribute('autocapitalize', 'off');
+            input.setAttribute('aria-label', 'Proxy URL');
+            input.placeholder = PX.proxy || 'https://proxy.example.com';
+            // Keep what the user is typing when settings redraws.
+            input.value = tab.proxyDraft != null ? tab.proxyDraft : PROXY_ORIGIN;
+            input.addEventListener('input', () => { tab.proxyDraft = input.value; error.textContent = ''; });
+            const save = document.createElement('button');
+            save.type = 'submit';
+            save.className = 'set-btn';
+            save.textContent = 'Save';
+            form.append(input, save);
+            form.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const raw = input.value.trim();
+                // Emptying the field goes back to the proxy built into this page.
+                const origin = raw ? parseProxyOrigin(raw) : PX.proxy;
+                if (raw && !origin) {
+                    error.textContent = 'That doesn’t look like an http(s) address.';
+                    return;
+                }
+                tab.proxyDraft = null;
+                setProxyOrigin(origin);
+            });
+            inner.appendChild(form);
+
+            const error = document.createElement('div');
+            error.className = 'set-note set-error';
+            inner.appendChild(error);
+
+            const status = document.createElement('div');
+            status.className = 'set-status';
+            const dot = document.createElement('span');
+            dot.className = 'set-dot ' + (!PROXY_ORIGIN ? '' : engineReady ? 'ready' : engineFailed ? 'failed' : '');
+            status.appendChild(dot);
+            status.appendChild(document.createTextNode(
+                !PROXY_ORIGIN ? 'No proxy set'
+                    : engineReady ? 'Peekaboom ready'
+                        : engineFailed ? 'Peekaboom is not reachable'
+                            : 'Connecting to Peekaboom…'
+            ));
+            inner.appendChild(status);
+
+            const note = (text, cls) => {
+                const n = document.createElement('div');
+                n.className = 'set-note' + (cls ? ' ' + cls : '');
+                n.textContent = text;
+                inner.appendChild(n);
+            };
+
+            if (engineError) note(engineError, 'set-error');
+
+            if (!PROXY_ORIGIN) {
+                note('No proxy is set. Enter the address of a Peekaboom proxy, or leave this field empty ' +
+                    'and save to use the one built into this page' + (PX.proxy ? ' (' + PX.proxy + ')' : '') +
+                    '. Every site loads through it.');
+                if (tab.pendingNav) note('Waiting to open ' + tab.pendingNav + ' once a proxy is saved.');
+            } else if (PROXY_ORIGIN === PX.proxy) {
+                note('Sites load through this page’s own service worker, under ' + PX.prefix + '.');
+                if (PX.written) {
+                    note('This copy of the page was written into a blank window, so it can’t reach the worker ' +
+                        'itself. Sites still load through it; the first one installs it if it isn’t there yet.');
+                }
+                note('Proxied sites share this page’s origin, so a site that got out of its frame could read your ' +
+                    'tabs and bookmarks. Pointing this at a Peekaboom on another origin keeps them apart.', 'set-warn');
+            } else {
+                note('Sites load through ' + PROXY_ORIGIN + ', a separate origin from this page.');
+                const local = /^(localhost|127\.|\[::1\])/.test(new URL(PROXY_ORIGIN).hostname);
+                if (PX.origin.startsWith('https:') && PROXY_ORIGIN.startsWith('http:') && !local) {
+                    note('This page is served over https, so the browser will block an http proxy. Use an https address.', 'set-warn');
+                }
+                if (proxySite() === PX.origin) {
+                    note('The proxy shares this page’s origin, so proxied sites could read your tabs and bookmarks. ' +
+                        'Host this page somewhere else.', 'set-warn');
+                }
+            }
+
+            note(!PX.here
+                ? 'The proxy needs this page served over http(s); opened as a file, there is no origin for a service worker to claim.'
+                : 'Bookmarklets and tab muting work from any origin by default. If the proxy was started with UI_ORIGIN set, ' +
+                    'it must include ' + PX.origin + ' (or *).');
+        }
+
+        function buildWindowSection(inner) {
+            inner.appendChild(settingsSection('Sites that can open new windows'));
+
+            const allowed = Object.keys(winDecisions).filter(o => winDecisions[o] === 'allow').sort();
+
+            if (!allowed.length) {
+                const empty = document.createElement('div');
+                empty.className = 'set-empty';
+                empty.textContent = 'No sites yet. When a site asks to open a new window and you allow it, it is remembered here.';
+                inner.appendChild(empty);
+                return;
+            }
+
+            allowed.forEach(origin => {
+                const row = document.createElement('div');
+                row.className = 'set-site';
+
+                const name = document.createElement('span');
+                name.className = 'set-site-name';
+                name.textContent = origin.replace(/^https?:\/\//, '');
+                name.title = origin;
+
+                const del = document.createElement('button');
+                del.className = 'set-del';
+                del.title = 'Remove ' + origin;
+                del.setAttribute('aria-label', 'Remove ' + origin);
+                del.addEventListener('click', () => {
+                    delete winDecisions[origin];
+                    saveWinDecisions();
+                    renderAllSettings();
+                });
+
+                row.append(name, del);
+                inner.appendChild(row);
+            });
+
+            const note = document.createElement('div');
+            note.className = 'set-note';
+            note.textContent = 'Removing a site makes Knoiren ask again the next time it tries to open a window.';
+            inner.appendChild(note);
+        }
+
+        function renderSettings(tab) {
+            if (!tab.settingsEl) return;
+            const inner = tab.settingsEl.querySelector('.set-inner');
+            inner.innerHTML = '';
+
+            const title = document.createElement('h1');
+            title.className = 'set-title';
+            title.textContent = 'Settings';
+            inner.appendChild(title);
+
+            buildProxySection(inner, tab);
+            buildWindowSection(inner);
+        }
+
+        // Settings state is global, so every open settings tab has to be redrawn.
+        function renderAllSettings() {
+            tabs.forEach(t => { if (t.settingsEl) renderSettings(t); });
+        }
+
+        function showSettings(tab) {
+            if (!tab) return;
+            if (!tab.settingsEl) {
+                const page = document.createElement('div');
+                page.className = 'settingspage';
+                const inner = document.createElement('div');
+                inner.className = 'set-inner';
+                page.appendChild(inner);
+                tab.panel.appendChild(page);
+                tab.settingsEl = page;
+            }
+            renderSettings(tab);
+            if (!engineReady) initProxy();
+
+            tab.type = 'settings';
+            tab.url = SETTINGS_URL;
+            tab.title = 'Settings';
+            tab.favicon = SETTINGS_ICON;
+            if (tab.newtabEl) tab.newtabEl.style.display = 'none';
+            if (tab.sframe) tab.sframe.frame.style.display = 'none';
+            if (tab.noproxyEl) tab.noproxyEl.style.display = 'none';
+            tab.settingsEl.style.display = '';
+
+            renderTabs();
+            if (tab.id === activeId) syncToolbar();
+        }
+
+        function openSettings() {
+            const existing = tabs.find(t => t.type === 'settings');
+            if (existing) {
+                activateTab(existing.id);
+                renderSettings(existing);
+                return;
+            }
+            const cur = activeTab();
+            // Reuse an untouched new tab; otherwise open a fresh one.
+            const tab = (cur && cur.type === 'newtab' && !cur.hist.length) ? cur : (createTab() || cur);
+            showSettings(tab);
+        }
+
+        // Shown in place of a site when there is no proxy to load it through.
+        function showNoProxy(tab, url) {
+            if (!tab.noproxyEl) {
+                const page = document.createElement('div');
+                page.className = 'noproxy';
+                const title = document.createElement('div');
+                title.className = 'np-title';
+                title.textContent = 'No proxy set';
+                const text = document.createElement('div');
+                text.className = 'np-text';
+                text.textContent = 'You can add one in settings.';
+                page.append(title, text);
+                tab.panel.appendChild(page);
+                tab.noproxyEl = page;
+            }
+            tab.type = 'noproxy';
+            tab.url = url;
+            tab.title = 'No proxy set';
+            tab.favicon = NEWTAB_ICON;
+            if (tab.newtabEl) tab.newtabEl.style.display = 'none';
+            if (tab.settingsEl) tab.settingsEl.style.display = 'none';
+            if (tab.sframe) tab.sframe.frame.style.display = 'none';
+            tab.noproxyEl.style.display = '';
+            renderTabs();
+            if (tab.id === activeId) syncToolbar();
+        }
+
+        function ensureFrame(tab) {
+            if (tab.sframe) return tab.sframe;
+            const sframe = engine.createFrame();
+            const f = sframe.frame;
+            f.classList.add('webframe');
+            tab.panel.appendChild(f);
+            tab.sframe = sframe;
+
+            sframe.addEventListener('urlchange', (e) => onUrlChange(tab, e));
+            sframe.addEventListener('open', (e) => onWindowOpen(tab, e));
+            return sframe;
+        }
+
+        async function navigateTab(tab, query) {
+            if (SETTINGS_RE.test(String(query || '').trim())) return showSettings(tab);
+            const url = normalizeUrl(query);
+            if (!url) return;
+            if (!PROXY_ORIGIN) {
+                tab.pendingNav = url;
+                showNoProxy(tab, url);
+                return;
+            }
+
+            const sframe = ensureFrame(tab);
+            tab.hist = tab.hist.slice(0, tab.histPtr + 1);
+            if (tab.hist[tab.histPtr] !== url) {
+                tab.hist.push(url);
+                tab.histPtr = tab.hist.length - 1;
+            }
+            tab.type = 'web';
+            tab.url = url;
+            showFrame(tab);
+            sframe.go(url);
+            if (tab.id === activeId) syncToolbar();
+            renderTabs();
+        }
+
+        function onUrlChange(tab, e) {
+            const real = decodeRealUrl(e.url);
+            if (tab.suppress) {
+                tab.suppress = false;
+            } else if (real && real !== tab.url && /^https?:/i.test(real)) {
+                tab.hist = tab.hist.slice(0, tab.histPtr + 1);
+                tab.hist.push(real);
+                tab.histPtr = tab.hist.length - 1;
+            }
+            if (real && /^https?:/i.test(real)) tab.url = real;
+            tab.meta = { title: e.title, icon: e.icon };
+            updateMeta(tab);
+        }
+
+        // target=_blank links open a tab; scripted pop-ups need the site's permission.
+        function onWindowOpen(tab, e) {
+            const target = e.url;
+            if (!/^https?:/i.test(target)) return;
+            const origin = siteOrigin(tab);
+            if (e.user || (origin && winDecisions[origin] === 'allow')) createTab({ url: target });
+            else confirmWindowOpen(tab, target, origin);
+        }
+
+        function updateMeta(tab) {
+            const meta = tab.meta || {};
+            let host = '';
+            try { host = new URL(tab.url).hostname.replace(/^www\./, ''); } catch (e) { }
+            tab.title = meta.title || host || tab.title;
+            let icon = meta.icon && proxyUrl(meta.icon);
+            if (!icon && tab.url) {
+                try { icon = proxyUrl(new URL('/favicon.ico', tab.url).href); } catch (e) { }
+            }
+            tab.favicon = icon || NO_ICON;
+            renderTabs();
+            if (tab.id === activeId) syncToolbar();
+        }
+
+        function goBack(tab) {
+            if (!tab) return;
+            if (tab.histPtr > 0) {
+                tab.histPtr--;
+                tab.suppress = true;
+                tab.url = tab.hist[tab.histPtr];
+                showFrame(tab);
+                tab.sframe.go(tab.url);
+            } else if (tab.histPtr === 0) {
+                tab.histPtr = -1;
+                tab.url = '';
+                tab.title = 'New tab';
+                tab.favicon = NEWTAB_ICON;
+                showNewtab(tab);
+            }
+            renderTabs();
+            syncToolbar();
+        }
+
+        function goForward(tab) {
+            if (!tab) return;
+            if (tab.histPtr === -1 && tab.hist.length > 0) {
+                tab.histPtr = 0;
+                tab.url = tab.hist[0];
+                showFrame(tab);
+                updateMeta(tab);
+            } else if (tab.histPtr < tab.hist.length - 1) {
+                tab.histPtr++;
+                tab.suppress = true;
+                tab.url = tab.hist[tab.histPtr];
+                showFrame(tab);
+                tab.sframe.go(tab.url);
+            }
+            renderTabs();
+            syncToolbar();
+        }
+
+        function reloadTab(tab) {
+            if (!tab) return;
+            if (tab.type === 'settings') { renderSettings(tab); return; }
+            if (tab.type === 'noproxy') { navigateTab(tab, tab.url); return; }
+            if (tab.histPtr >= 0 && tab.sframe) tab.sframe.go(tab.url);
+        }
+
+        function canGoBack(tab) {
+            return tab && tab.histPtr >= 0 && tab.hist.length > 0;
+        }
+        function canGoForward(tab) {
+            return tab && ((tab.histPtr === -1 && tab.hist.length > 0) || tab.histPtr < tab.hist.length - 1);
+        }
+
+        const btnBack = document.getElementById('btn-back');
+        const btnForward = document.getElementById('btn-forward');
+        const starBtn = document.getElementById('star-btn');
+
+        function syncToolbar() {
+            const tab = activeTab();
+            urlInput.value = tab ? tab.url : '';
+            btnBack.classList.toggle('disabled', !canGoBack(tab));
+            btnForward.classList.toggle('disabled', !canGoForward(tab));
+            updateStar();
+        }
+
+        function updateStar() {
+            const tab = activeTab();
+            const isBm = tab && tab.url && findBookmarkByUrl(tab.url);
+            starBtn.querySelector('img').src = isBm ? STAR_ON : STAR_OFF;
+            starBtn.title = isBm ? 'Edit bookmark' : 'Bookmark this page';
+        }
+
+        const bmBar = document.getElementById('bookmarksbar');
+        let bookmarks = loadBookmarks();
+        let bmClipboard = null;
+
+        function loadBookmarks() {
+            try {
+                const raw = localStorage.getItem('knoiren_bookmarks');
+                if (raw) return JSON.parse(raw);
+            } catch (e) { }
+            return [];
+        }
+        function saveBookmarks() {
+            localStorage.setItem('knoiren_bookmarks', JSON.stringify(bookmarks));
+        }
+        function newId() {
+            return 'b' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        }
+
+        function isBookmarklet(node) {
+            return node && node.type === 'bookmark' && /^\s*javascript:/i.test(node.url || '');
+        }
+
+        // Pages live on the proxy's origin, so the page runtime runs the code for us.
+        function runBookmarklet(tab, rawUrl) {
+            if (!tab || !tab.sframe || !/^https?:/i.test(tab.url || '')) return;
+            let code = String(rawUrl).replace(/^\s*javascript:/i, '');
+            try { code = decodeURIComponent(code); } catch (e) { }
+            tab.sframe.frame.contentWindow.postMessage({ __px: 'run', code }, proxySite());
+        }
+
+        function findBookmarkByUrl(url, list = bookmarks) {
+            for (const node of list) {
+                if (node.type === 'bookmark' && node.url === url) return node;
+                if (node.type === 'folder' && node.children) {
+                    const f = findBookmarkByUrl(url, node.children);
+                    if (f) return f;
+                }
+            }
+            return null;
+        }
+
+        function locate(id, list = bookmarks, parent = bookmarks) {
+            for (let i = 0; i < list.length; i++) {
+                if (list[i].id === id) return { node: list[i], arr: list, index: i };
+                if (list[i].type === 'folder' && list[i].children) {
+                    const r = locate(id, list[i].children, list[i].children);
+                    if (r) return r;
+                }
+            }
+            return null;
+        }
+
+        function cloneNode(node) {
+            return JSON.parse(JSON.stringify(node));
+        }
+
+        const bmEls = new Map();
+
+        function renderBookmarks() {
+            bmBar.classList.toggle('empty', bookmarks.length === 0);
+            const seen = new Set();
+            let prev = null;
+            bookmarks.forEach(node => {
+                seen.add(node.id);
+                let el = bmEls.get(node.id);
+                if (!el) { el = makeBmEl(node); bmEls.set(node.id, el); }
+                else { updateBmEl(el, node); }
+                const want = prev ? prev.nextSibling : bmBar.firstChild;
+                if (want !== el) bmBar.insertBefore(el, want);
+                prev = el;
+            });
+            for (const [id, el] of bmEls) {
+                if (!seen.has(id)) { el.remove(); bmEls.delete(id); }
+            }
+            updateStar();
+        }
+
+        function makeBmEl(node) {
+            const el = document.createElement('div');
+            el.className = 'bm';
+            el.dataset.id = node.id;
+            const img = document.createElement('img');
+            const label = document.createElement('span');
+            label.className = 'bm-label';
+            el.append(img, label);
+
+            el.addEventListener('click', (e) => {
+                const n = (locate(el.dataset.id) || {}).node;
+                if (!n) return;
+                if (n.type === 'folder') { e.stopPropagation(); openFolderDropdown(n, el); }
+                else if (isBookmarklet(n)) { const t = activeTab(); if (t) runBookmarklet(t, n.url); }
+                else { const t = activeTab(); if (t) navigateTab(t, n.url); }
+            });
+            el.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openCtxMenu(e.clientX, e.clientY, (locate(el.dataset.id) || {}).node || node);
+            });
+
+            updateBmEl(el, node);
+            return el;
+        }
+
+        function updateBmEl(el, node) {
+            const img = el.querySelector('img');
+            const label = el.querySelector('.bm-label');
+            const wantSrc = node.type === 'folder' ? FOLDER_ICON : (node.icon || NO_ICON);
+            if (img.getAttribute('src') !== wantSrc) {
+                img.onerror = () => { img.onerror = null; img.src = NO_ICON; };
+                img.src = wantSrc;
+            }
+            const wantText = node.type === 'folder' ? (node.title || 'Folder') : (node.title || node.url);
+            if (label.textContent !== wantText) label.textContent = wantText;
+        }
+
+        let openDropdowns = [];
+        function closeDropdowns() {
+            openDropdowns.forEach(d => d.remove());
+            openDropdowns = [];
+        }
+        function openFolderDropdown(folder, anchorEl, x, y) {
+            closeDropdowns();
+            const dd = document.createElement('div');
+            dd.className = 'bm-dropdown';
+            const children = folder.children || [];
+            if (children.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'dd-empty';
+                empty.textContent = '(empty)';
+                dd.appendChild(empty);
+            } else {
+                children.forEach(child => {
+                    const item = document.createElement('div');
+                    item.className = 'dd-item';
+                    const img = document.createElement('img');
+                    const lbl = document.createElement('span');
+                    lbl.className = 'dd-label';
+                    if (child.type === 'folder') {
+                        img.src = FOLDER_ICON;
+                        lbl.textContent = child.title || 'Folder';
+                        item.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const r = item.getBoundingClientRect();
+                            openFolderDropdown(child, item, r.right, r.top);
+                        });
+                    } else {
+                        img.src = child.icon || NO_ICON;
+                        img.onerror = () => { img.onerror = null; img.src = NO_ICON; };
+                        lbl.textContent = child.title || child.url;
+                        item.addEventListener('click', () => {
+                            closeDropdowns();
+                            const t = activeTab(); if (!t) return;
+                            if (isBookmarklet(child)) runBookmarklet(t, child.url);
+                            else navigateTab(t, child.url);
+                        });
+                    }
+                    item.addEventListener('contextmenu', (e) => {
+                        e.preventDefault(); e.stopPropagation();
+                        openCtxMenu(e.clientX, e.clientY, child);
+                    });
+                    item.append(img, lbl);
+                    dd.appendChild(item);
+                });
+            }
+            document.body.appendChild(dd);
+            if (x == null) {
+                const r = anchorEl.getBoundingClientRect();
+                x = r.left; y = r.bottom + 2;
+            }
+            dd.style.left = Math.min(x, window.innerWidth - dd.offsetWidth - 6) + 'px';
+            dd.style.top = y + 'px';
+            openDropdowns.push(dd);
+        }
+
+        const ctxMenu = document.getElementById('ctx-menu');
+        let ctxTarget = null;
+
+        function showCtxMenu(x, y, items) {
+            ctxMenu.innerHTML = '';
+            items.forEach(it => {
+                if (it.sep) {
+                    const s = document.createElement('div');
+                    s.className = 'ctx-sep';
+                    ctxMenu.appendChild(s);
+                    return;
+                }
+                const el = document.createElement('div');
+                el.className = 'ctx-item' + (it.disabled ? ' disabled' : '');
+                el.textContent = it.label;
+                if (!it.disabled) el.addEventListener('click', () => { closeCtxMenu(); it.action(); });
+                ctxMenu.appendChild(el);
+            });
+            ctxMenu.style.display = 'block';
+            const w = ctxMenu.offsetWidth, h = ctxMenu.offsetHeight;
+            ctxMenu.style.left = Math.min(x, window.innerWidth - w - 6) + 'px';
+            ctxMenu.style.top = Math.min(y, window.innerHeight - h - 6) + 'px';
+        }
+
+        function openCtxMenu(x, y, node) {
+            ctxTarget = node || null;
+            const items = [
+                { label: 'New blank bookmark', action: ctxNewBookmark },
+                { label: 'New folder', action: ctxNewFolder },
+                { label: 'Bookmark this page', action: ctxBookmarkPage },
+                { sep: true },
+                { label: 'Cut', action: ctxCut, disabled: !ctxTarget },
+                { label: 'Copy', action: ctxCopy, disabled: !ctxTarget },
+                { label: 'Paste', action: ctxPaste },
+            ];
+            if (ctxTarget) {
+                items.push({ sep: true });
+                items.push({ label: 'Edit…', action: ctxEdit });
+                items.push({ label: 'Delete', action: ctxDelete });
+            }
+            showCtxMenu(x, y, items);
+        }
+
+        function closeCtxMenu() {
+            ctxMenu.style.display = 'none';
+        }
+
+        function openTabMenu(x, y, tab) {
+            const idx = tabs.indexOf(tab);
+            const others = tabs.filter(t => t !== tab && !t.pinned);
+            const toRight = tabs.slice(idx + 1).filter(t => !t.pinned);
+            const toLeft = tabs.slice(0, idx).filter(t => !t.pinned);
+            showCtxMenu(x, y, [
+                { label: 'Duplicate', action: () => duplicateTab(tab) },
+                { label: 'Reload', action: () => reloadTab(tab), disabled: tab.histPtr < 0 },
+                { label: tab.pinned ? 'Unpin' : 'Pin', action: () => togglePin(tab) },
+                { label: tab.muted ? 'Unmute tab' : 'Mute tab', action: () => setTabMuted(tab, !tab.muted) },
+                { sep: true },
+                { label: 'Close', action: () => closeTab(tab.id) },
+                { label: 'Close other tabs', action: () => closeMany(others), disabled: others.length === 0 },
+                { label: 'Close Tabs to the right', action: () => closeMany(toRight), disabled: toRight.length === 0 },
+                { label: 'Close Tabs to the left', action: () => closeMany(toLeft), disabled: toLeft.length === 0 },
+            ]);
+        }
+
+        function duplicateTab(tab) {
+            const idx = tabs.indexOf(tab);
+            const dup = createTab(tab.url ? { url: tab.url } : {});
+            const from = tabs.indexOf(dup);
+            if (!dup || from !== tabs.length - 1) return;
+            tabs.splice(from, 1);
+            tabs.splice(idx + 1, 0, dup);
+            reorderPinned();
+            renderTabs();
+        }
+
+        function labelTypewriter(tab, lowW, highW, durationMs) {
+            const range = Math.max(1, highW - lowW);
+            const start = performance.now();
+            function tick(now) {
+                // Read the title live: a tab can be renamed mid-animation (e.g. a new
+                // tab immediately becoming the settings page).
+                const fullTitle = tab.title || 'New tab';
+                const totalUnits = fullTitle.length + 1;
+                const w = tab.el.getBoundingClientRect().width;
+                const p = Math.max(0, Math.min(1, (w - lowW) / range));
+                const vis = Math.round(totalUnits * p);
+                const txt = fullTitle.slice(0, Math.min(vis, fullTitle.length));
+                if (tab.titleEl.textContent !== txt) tab.titleEl.textContent = txt;
+                tab.closeEl.style.display = vis > fullTitle.length ? '' : 'none';
+                if (now - start < durationMs + 40) requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+        }
+
+        function animateTabOpen(tab) {
+            const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            const el = tab.el;
+            if (reduce || !el) return;
+            const ANIM = 260;
+            const targetW = el.getBoundingClientRect().width;
+            const startW = Math.min(36, targetW);
+            if (targetW - startW < 1) return;
+
+            tab._animatingLabel = true;
+            el.classList.add('label-anim');
+            el.style.transition = 'none';
+            el.style.minWidth = '0px';
+            el.style.width = startW + 'px';
+            el.style.flex = '0 0 ' + startW + 'px';
+            el.style.zIndex = '-1';
+
+            requestAnimationFrame(() => {
+                el.style.transition = `width ${ANIM}ms ease, flex-basis ${ANIM}ms ease`;
+                el.style.width = targetW + 'px';
+                el.style.flex = '0 0 ' + targetW + 'px';
+            });
+
+            labelTypewriter(tab, startW, targetW, ANIM);
+
+            setTimeout(() => {
+                el.style.transition = '';
+                el.style.width = '';
+                el.style.flex = '';
+                el.style.minWidth = '';
+                el.style.zIndex = '';
+                el.classList.remove('label-anim');
+                tab._animatingLabel = false;
+                updateTabEl(tab);
+            }, ANIM + 40);
+        }
+
+        function togglePin(tab) {
+            const ANIM = 260;
+            const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+            const first = new Map();
+            tabs.forEach(t => first.set(t.id, t.el.getBoundingClientRect()));
+
+            tab._animatingLabel = !reduce;
+            tab.pinned = !tab.pinned;
+            reorderPinned();
+            renderTabs();
+
+            if (reduce) return;
+
+            const tFirstW = (first.get(tab.id) || tab.el.getBoundingClientRect()).width;
+            const tLastW = tab.el.getBoundingClientRect().width;
+            const fullW = Math.max(tFirstW, tLastW);
+            const pinnedW = Math.min(tFirstW, tLastW);
+            tab.el.classList.add('label-anim');
+
+            const animating = [];
+            tabs.forEach(t => {
+                const f = first.get(t.id);
+                if (!f) return;
+                const l = t.el.getBoundingClientRect();
+                const dx = f.left - l.left;
+                const dw = f.width - l.width;
+                if (Math.abs(dx) < 0.5 && Math.abs(dw) < 0.5) return;
+                const el = t.el;
+                el.style.transition = 'none';
+                el.style.transform = `translateX(${dx}px)`;
+                if (Math.abs(dw) > 0.5) {
+                    el.style.width = f.width + 'px';
+                    el.style.flex = '0 0 ' + f.width + 'px';
+                    el.dataset.targetW = l.width;
+                }
+                animating.push(el);
+            });
+            tab.el.style.zIndex = '-1';
+
+            requestAnimationFrame(() => {
+                animating.forEach(el => {
+                    el.style.transition = `transform ${ANIM}ms ease, width ${ANIM}ms ease, flex-basis ${ANIM}ms ease`;
+                    el.style.transform = 'translateX(0)';
+                    if (el.dataset.targetW != null) {
+                        el.style.width = el.dataset.targetW + 'px';
+                        el.style.flex = '0 0 ' + el.dataset.targetW + 'px';
+                    }
+                });
+            });
+
+            labelTypewriter(tab, pinnedW, fullW, ANIM);
+
+            setTimeout(() => {
+                animating.forEach(el => {
+                    el.style.transition = '';
+                    el.style.transform = '';
+                    el.style.width = '';
+                    el.style.flex = '';
+                    delete el.dataset.targetW;
+                });
+                tab.el.style.zIndex = '';
+                tab.el.classList.remove('label-anim');
+                tab._animatingLabel = false;
+                updateTabEl(tab);
+            }, ANIM + 40);
+        }
+
+        function reorderPinned() {
+            tabs = [...tabs.filter(t => t.pinned), ...tabs.filter(t => !t.pinned)];
+        }
+
+        function closeMany(list) {
+            list.slice().forEach(t => closeTab(t.id, { animate: false }));
+        }
+
+        function insertNode(node) {
+            if (ctxTarget) {
+                const loc = locate(ctxTarget.id);
+                if (loc) { loc.arr.splice(loc.index + 1, 0, node); saveBookmarks(); renderBookmarks(); return; }
+            }
+            bookmarks.push(node);
+            saveBookmarks();
+            renderBookmarks();
+        }
+
+        async function ctxNewBookmark() {
+            const res = await showModal({
+                title: 'New bookmark',
+                fields: [{ key: 'title', label: 'Name', value: '' }, { key: 'url', label: 'URL', value: 'https://' }]
+            });
+            if (!res) return;
+            insertNode({ id: newId(), type: 'bookmark', title: res.title || res.url, url: res.url, icon: NO_ICON });
+        }
+
+        async function ctxNewFolder() {
+            const res = await showModal({
+                title: 'New folder',
+                fields: [{ key: 'title', label: 'Name', value: '' }]
+            });
+            if (!res) return;
+            insertNode({ id: newId(), type: 'folder', title: res.title || 'New folder', children: [] });
+        }
+
+        function ctxBookmarkPage() {
+            const tab = activeTab();
+            if (!tab || !tab.url) return;
+            insertNode({ id: newId(), type: 'bookmark', title: tab.title || tab.url, url: tab.url, icon: tab.favicon || NO_ICON });
+        }
+
+        function ctxCut() {
+            if (!ctxTarget) return;
+            const loc = locate(ctxTarget.id);
+            if (!loc) return;
+            bmClipboard = { node: cloneNode(loc.node) };
+            loc.arr.splice(loc.index, 1);
+            saveBookmarks();
+            renderBookmarks();
+        }
+
+        function ctxCopy() {
+            if (!ctxTarget) return;
+            bmClipboard = { node: cloneNode(ctxTarget) };
+        }
+
+        async function ctxPaste() {
+            if (bmClipboard) {
+                const node = cloneNode(bmClipboard.node);
+                reassignIds(node);
+                insertNode(node);
+                return;
+            }
+            let text = '';
+            try { text = await navigator.clipboard.readText(); } catch (e) { }
+            text = (text || '').trim();
+            if (!text) return;
+            const url = /^https?:\/\//i.test(text) ? text : (text.includes('.') ? 'https://' + text : null);
+            if (!url) return;
+            const tab = activeTab();
+            let title, icon;
+            if (tab && tab.url === url) { title = tab.title; icon = tab.favicon; }
+            else { try { title = new URL(url).hostname.replace(/^www\./, ''); } catch (e) { title = url; } icon = NO_ICON; }
+            insertNode({ id: newId(), type: 'bookmark', title: title || url, url, icon: icon || NO_ICON });
+        }
+
+        function reassignIds(node) {
+            node.id = newId();
+            if (node.children) node.children.forEach(reassignIds);
+        }
+
+        async function ctxEdit() {
+            if (!ctxTarget) return;
+            const node = ctxTarget;
+            if (node.type === 'folder') {
+                const res = await showModal({ title: 'Edit folder', fields: [{ key: 'title', label: 'Name', value: node.title || '' }] });
+                if (!res) return;
+                node.title = res.title || node.title;
+            } else {
+                const res = await showModal({
+                    title: 'Edit bookmark',
+                    fields: [{ key: 'title', label: 'Name', value: node.title || '' }, { key: 'url', label: 'URL', value: node.url || '' }]
+                });
+                if (!res) return;
+                node.title = res.title || node.title;
+                node.url = res.url || node.url;
+            }
+            saveBookmarks();
+            renderBookmarks();
+        }
+
+        function ctxDelete() {
+            if (!ctxTarget) return;
+            const loc = locate(ctxTarget.id);
+            if (!loc) return;
+            loc.arr.splice(loc.index, 1);
+            saveBookmarks();
+            renderBookmarks();
+        }
+
+        bmBar.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            openCtxMenu(e.clientX, e.clientY, null);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!ctxMenu.contains(e.target)) closeCtxMenu();
+            if (!e.target.closest('.bm-dropdown') && !e.target.closest('.bm')) closeDropdowns();
+        });
+        window.addEventListener('blur', () => { closeCtxMenu(); closeDropdowns(); });
+
+        starBtn.addEventListener('click', () => {
+            const tab = activeTab();
+            if (!tab || !tab.url) { ctxNewBookmark(); return; }
+            const existing = findBookmarkByUrl(tab.url);
+            if (existing) {
+                const loc = locate(existing.id);
+                if (loc) { loc.arr.splice(loc.index, 1); saveBookmarks(); renderBookmarks(); }
+            } else {
+                bookmarks.push({ id: newId(), type: 'bookmark', title: tab.title || tab.url, url: tab.url, icon: tab.favicon || NO_ICON });
+                saveBookmarks();
+                renderBookmarks();
+            }
+        });
+
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalBox = document.getElementById('modal-box');
+
+        function showModal({ title, fields }) {
+            return new Promise(resolve => {
+                modalBox.innerHTML = '';
+                const h = document.createElement('h3');
+                h.textContent = title;
+                modalBox.appendChild(h);
+                const inputs = {};
+                fields.forEach(f => {
+                    const lbl = document.createElement('label');
+                    lbl.textContent = f.label;
+                    const inp = document.createElement('input');
+                    inp.value = f.value || '';
+                    inputs[f.key] = inp;
+                    modalBox.append(lbl, inp);
+                });
+                const actions = document.createElement('div');
+                actions.className = 'modal-actions';
+                const cancel = document.createElement('button');
+                cancel.className = 'btn-cancel'; cancel.textContent = 'Cancel';
+                const ok = document.createElement('button');
+                ok.className = 'btn-ok'; ok.textContent = 'Save';
+                actions.append(cancel, ok);
+                modalBox.appendChild(actions);
+
+                function done(val) {
+                    modalOverlay.classList.remove('show');
+                    resolve(val);
+                }
+                cancel.addEventListener('click', () => done(null));
+                ok.addEventListener('click', () => {
+                    const out = {};
+                    Object.keys(inputs).forEach(k => out[k] = inputs[k].value.trim());
+                    done(out);
+                });
+                modalBox.addEventListener('keydown', function onKey(e) {
+                    if (e.key === 'Enter') { e.preventDefault(); ok.click(); }
+                    if (e.key === 'Escape') { e.preventDefault(); cancel.click(); }
+                });
+                modalOverlay.classList.add('show');
+                const first = fields[0] && inputs[fields[0].key];
+                if (first) { first.focus(); first.select(); }
+            });
+        }
+
+        let winDecisions = {};
+        try { winDecisions = JSON.parse(localStorage.getItem('knoiren-win-decisions') || '{}') || {}; } catch (e) { winDecisions = {}; }
+        function saveWinDecisions() {
+            try { localStorage.setItem('knoiren-win-decisions', JSON.stringify(winDecisions)); } catch (e) { }
+        }
+        function siteOrigin(tab) {
+            if (!tab || !/^https?:/i.test(tab.url || '')) return '';
+            try { return new URL(tab.url).origin; } catch (e) { return tab.url || ''; }
+        }
+
+        function showConfirm(title, msg, okLabel = 'Continue') {
+            return new Promise(resolve => {
+                modalBox.innerHTML = '';
+                const h = document.createElement('h3');
+                h.textContent = title;
+                const p = document.createElement('div');
+                p.className = 'modal-msg';
+                p.textContent = msg;
+
+                const actions = document.createElement('div');
+                actions.className = 'modal-actions';
+                const cancel = document.createElement('button');
+                cancel.className = 'btn-cancel'; cancel.textContent = 'Cancel';
+                const ok = document.createElement('button');
+                ok.className = 'btn-ok'; ok.textContent = okLabel;
+                actions.append(cancel, ok);
+                modalBox.append(h, p, actions);
+
+                function done(v) { modalOverlay.classList.remove('show'); resolve(v); }
+                cancel.addEventListener('click', () => done(false));
+                ok.addEventListener('click', () => done(true));
+                modalBox.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') { e.preventDefault(); ok.click(); }
+                    if (e.key === 'Escape') { e.preventDefault(); cancel.click(); }
+                });
+                modalOverlay.classList.add('show');
+                ok.focus();
+            });
+        }
+
+        function showWindowWarning(url) {
+            return new Promise(resolve => {
+                modalBox.innerHTML = '';
+                const h = document.createElement('h3');
+                h.textContent = 'Allow new windows?';
+                const p = document.createElement('div');
+                p.className = 'modal-msg';
+                p.textContent = 'This site wants to open a new window:\n\n' + url;
+
+                const actions = document.createElement('div');
+                actions.className = 'modal-actions';
+                const block = document.createElement('button');
+                block.className = 'btn-cancel'; block.textContent = 'Block';
+                const allow = document.createElement('button');
+                allow.className = 'btn-ok'; allow.textContent = 'Allow';
+                actions.append(block, allow);
+                modalBox.append(h, p, actions);
+
+                function done(action) { modalOverlay.classList.remove('show'); resolve(action); }
+                block.addEventListener('click', () => done('block'));
+                allow.addEventListener('click', () => done('allow'));
+                modalBox.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') { e.preventDefault(); allow.click(); }
+                    if (e.key === 'Escape') { e.preventDefault(); block.click(); }
+                });
+                modalOverlay.classList.add('show');
+                allow.focus();
+            });
+        }
+
+        async function confirmWindowOpen(tab, url, origin) {
+            const action = await showWindowWarning(url);
+            if (action !== 'allow') return;
+            if (origin) {
+                winDecisions[origin] = 'allow';
+                saveWinDecisions();
+                renderAllSettings();
+            }
+            createTab({ url });
+        }
+
+        document.getElementById('btn-back').addEventListener('click', () => goBack(activeTab()));
+        document.getElementById('btn-forward').addEventListener('click', () => goForward(activeTab()));
+        document.getElementById('btn-reload').addEventListener('click', () => reloadTab(activeTab()));
+        document.getElementById('newtab-btn').addEventListener('click', () => createTab());
+
+        const urlSuggest = document.getElementById('url-suggest');
+        attachSuggestions(urlInput, urlSuggest, (val) => {
+            const tab = activeTab();
+            if (tab) navigateTab(tab, val);
+            urlInput.blur();
+        }, () => {
+            const r = document.getElementById('urlbar').getBoundingClientRect();
+            urlSuggest.style.left = r.left + 'px';
+            urlSuggest.style.top = (r.bottom + 4) + 'px';
+            urlSuggest.style.width = r.width + 'px';
+        }, true);
+
+        const appEl = document.getElementById('app');
+        const collapseBtn = document.getElementById('collapse-btn');
+        const toolbarEl = document.getElementById('toolbar');
+        collapseBtn.addEventListener('click', () => {
+            const hidden = appEl.classList.toggle('chrome-hidden');
+            collapseBtn.classList.toggle('collapsed', hidden);
+            collapseBtn.title = hidden ? 'Show toolbar' : 'Hide toolbar';
+
+            if (hidden) {
+                toolbarEl.style.height = toolbarEl.scrollHeight + 'px';
+                toolbarEl.getBoundingClientRect();
+                toolbarEl.style.height = '0px';
+            } else {
+                toolbarEl.style.height = '0px';
+                toolbarEl.getBoundingClientRect();
+                const target = toolbarEl.scrollHeight;
+                toolbarEl.style.height = target + 'px';
+                const onEnd = (e) => {
+                    if (e.propertyName !== 'height') return;
+                    toolbarEl.style.height = '';
+                    toolbarEl.removeEventListener('transitionend', onEnd);
+                };
+                toolbarEl.addEventListener('transitionend', onEnd);
+            }
+        });
+
+        function imgEl(src) { const i = document.createElement('img'); i.src = src; return i; }
+        collapseBtn.appendChild(imgEl(ICON_COLLAPSE));
+        btnBack.appendChild(imgEl(ICON_FWD));
+        btnForward.appendChild(imgEl(ICON_FWD));
+        document.getElementById('btn-reload').appendChild(imgEl(ICON_RELOAD));
+        starBtn.appendChild(imgEl(STAR_OFF));
+
+        const gamesBtn = document.getElementById('games-btn');
+        const gamesSidebar = document.getElementById('games-sidebar');
+        const gamesList = document.getElementById('games-sidebar-list');
+        gamesBtn.appendChild(imgEl(GAMES_ICON));
+
+        // Browsers without overflow: clip still let a page inside a tab scroll this
+        // document (and #content) sideways; snap them back.
+        for (const el of [document.documentElement, document.body, document.getElementById('content')]) {
+            const target = el === document.documentElement ? window : el;
+            target.addEventListener('scroll', () => {
+                if (el.scrollLeft || el.scrollTop) { el.scrollLeft = 0; el.scrollTop = 0; }
+            });
+        }
+
+        function setGamesSidebar(open) {
+            gamesSidebar.classList.toggle('open', open);
+            gamesBtn.classList.toggle('active', open);
+        }
+
+        GAMES.forEach(([label, url]) => {
+            const link = document.createElement('div');
+            link.className = 'gs-link';
+            link.textContent = label;
+            link.addEventListener('click', () => {
+                const tab = tabs.find(t => t.id === activeId);
+                if (tab) navigateTab(tab, url);
+                setGamesSidebar(false);
+            });
+            gamesList.appendChild(link);
+        });
+
+        gamesBtn.addEventListener('click', () => setGamesSidebar(!gamesSidebar.classList.contains('open')));
+        document.getElementById('games-sidebar-close').addEventListener('click', () => setGamesSidebar(false));
+
+        const settingsBtn = document.getElementById('settings-btn');
+        settingsBtn.appendChild(imgEl(SETTINGS_ICON));
+        settingsBtn.addEventListener('click', () => openSettings());
+
+        const siteBtn = document.getElementById('site-btn');
+        const sitePanel = document.getElementById('site-panel');
+        siteBtn.appendChild(imgEl(SITE_ICON));
+
+        function renderSitePanel() {
+            const tab = activeTab();
+            const origin = tab ? siteOrigin(tab) : '';
+            sitePanel.innerHTML = '';
+
+            const head = document.createElement('div');
+            head.className = 'site-panel-head';
+            head.textContent = origin ? origin.replace(/^https?:\/\//, '') : 'No site loaded';
+            sitePanel.appendChild(head);
+
+            const row = document.createElement('div');
+            row.className = 'site-row';
+            const label = document.createElement('span');
+            label.textContent = 'Pop-up windows';
+            const status = document.createElement('span');
+            status.className = 'site-status';
+            status.textContent = !origin ? '—' : (winDecisions[origin] === 'allow' ? 'Allowed' : 'Ask');
+            row.append(label, status);
+            sitePanel.appendChild(row);
+
+            const reset = document.createElement('button');
+            reset.className = 'site-reset';
+            reset.textContent = 'Reset permission';
+            reset.disabled = !(origin && winDecisions[origin]);
+            reset.addEventListener('click', () => {
+                if (origin && winDecisions[origin]) { delete winDecisions[origin]; saveWinDecisions(); renderAllSettings(); }
+                renderSitePanel();
+            });
+            sitePanel.appendChild(reset);
+        }
+
+        function setSitePanel(open) {
+            if (open) {
+                renderSitePanel();
+                const r = siteBtn.getBoundingClientRect();
+                sitePanel.style.left = r.left + 'px';
+                sitePanel.style.top = (r.bottom + 6) + 'px';
+            }
+            sitePanel.classList.toggle('open', open);
+            siteBtn.classList.toggle('active', open);
+        }
+
+        siteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            setSitePanel(!sitePanel.classList.contains('open'));
+        });
+        document.addEventListener('click', (e) => {
+            if (sitePanel.classList.contains('open') && !sitePanel.contains(e.target) && !siteBtn.contains(e.target)) {
+                setSitePanel(false);
+            }
+        });
+
+        // Not the home page: the bootstrap is installing the worker and will
+        // reload, so the UI stays out of the way until it does.
+        if (PX.home) {
+            renderBookmarks();
+            initProxy();
+            const first = createTab();
+            // index.html?url=https://example.com opens that address right away.
+            const want = PX.here && PX.here.searchParams.get('url');
+            if (want && first) navigateTab(first, want);
+        }
+    </script>
+
+    <script>
+        function refreshFavicon() {
+            const existingIcons = document.querySelectorAll('link[rel=\'icon\']');
+            existingIcons.forEach(oldIcon => {
+                const newIcon = oldIcon.cloneNode(true);
+                oldIcon.remove();
+                document.head.appendChild(newIcon);
+            });
+        }
+        setTimeout(refreshFavicon, 51);
+    </script> 
+</body>
+
+</html>
