@@ -61,6 +61,11 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 
 ## Unblocked links
 
+#### Main link: https://ltorl.github.io/knoiren-browser
+
+<br>
+
+Other links:
 ```
 https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/open.svg
 https://fastly.jsdelivr.net/gh/ltorl/knoiren-browser/open.svg
