@@ -1,8 +1,8 @@
 <!DOCTYPE html>
 <!-- Knoiren Browser, single-file static build: the UI from index.js and the
      Peekaboom proxy it browses through, in one page. The proxy is sw.js, this
-     file's own service worker, installed on load; Settings can point at another
-     Peekaboom instead, and ?proxy=<url> presets one. Deploy as index.html next
+     file's own service worker, installed on load; there is no other proxy to
+     point it at, and Settings only reports it. Deploy as index.html next
      to sw.js, and, on a host with a 404 page, as a copy named 404.html so a
      reloaded proxied URL can find its way back. open.svg writes this file into
      a blank window, so nothing here may depend on the address bar. -->
@@ -720,28 +720,9 @@
             gap: 8px;
         }
 
-        .set-input {
-            flex: 1 1 auto;
-            min-width: 0;
-            padding: 10px 14px;
-            border-radius: 10px;
-            background: rgba(255, 255, 255, 0.06);
-            border: 1px solid rgba(255, 255, 255, 0.12);
-            color: var(--text);
-            font: inherit;
-            font-size: 0.9rem;
-            outline: none;
-            transition: border-color 0.15s ease, background 0.15s ease;
-        }
-
-        .set-input:focus {
-            border-color: #45a29e;
-            background: rgba(69, 162, 158, 0.1);
-        }
-
         .set-btn {
             flex: 0 0 auto;
-            padding: 0 18px;
+            padding: 10px 18px;
             border-radius: 10px;
             border: 1px solid #45a29e;
             background: rgba(69, 162, 158, 0.2);
@@ -755,10 +736,6 @@
 
         .set-btn:hover {
             background: rgba(69, 162, 158, 0.35);
-        }
-
-        .set-note.set-error:empty {
-            display: none;
         }
 
         .set-note.set-error,
@@ -1412,9 +1389,8 @@
                 origin: ORIGIN,
                 base: BASE,
                 prefix: BASE + '__px/',
-                // The address Settings shows for the built-in proxy: an origin
-                // plus this deployment's directory, without a trailing slash,
-                // which is the shape parseProxyOrigin() keeps.
+                // The proxy's address: this origin plus the deployment's
+                // directory, with no trailing slash, as the UI wants it.
                 proxy: ORIGIN + BASE.replace(/\/+$/, ''),
                 home: home,
                 // Written into a blank window: same origin and base, but no
@@ -1506,52 +1482,18 @@
 
     <script type="module">
         // The proxy is this page's own service worker, installed by the
-        // bootstrap above, so its address is wherever this file is served from.
-        // Settings can point at another Peekaboom -- a running index.js, or
-        // another copy of this deployment -- and keeps it in localStorage;
-        // ?proxy=https://proxy.example.com presets one. The address can include
-        // a path, since a static Peekaboom may live in a subdirectory.
+        // bootstrap above, so its address is wherever this file is served from
+        // and there is nothing to set. Opened as a file there is no origin for a
+        // worker to claim, and so no proxy at all.
         const PX = window.__px;
-        const PROXY_KEY = 'knoiren_proxy_origin';
-        // Used until Settings says otherwise; clearing the field brings it back.
-        const DEFAULT_PROXY_ORIGIN = PX.proxy;
         const PX_PREFIX = '/__px/';
 
-        // "proxy.example.com", "localhost:8787" or a full URL -> its origin, or '' if invalid.
-        function parseProxyOrigin(input) {
-            let s = String(input || '').trim();
-            if (!s) return '';
-            if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) {
-                const local = /^(localhost|127\.\d+\.\d+\.\d+|\[::1\]|10\.|192\.168\.|0\.0\.0\.0)/i.test(s);
-                s = (local ? 'http://' : 'https://') + s;
-            }
-            try {
-                const u = new URL(s);
-                if (!/^https?:$/.test(u.protocol) || !u.hostname) return '';
-                return u.origin + u.pathname.replace(/\/+$/, '');
-            } catch (e) {
-                return '';
-            }
-        }
+        const PROXY_ORIGIN = PX.here ? PX.proxy : '';
 
         // The proxy's own origin, for postMessage and for checking who a message
         // came from: those take an origin, never a path.
         function proxySite() {
             try { return new URL(PROXY_ORIGIN).origin; } catch (e) { return ''; }
-        }
-
-        let PROXY_ORIGIN = parseProxyOrigin(DEFAULT_PROXY_ORIGIN);
-        try {
-            const stored = localStorage.getItem(PROXY_KEY);
-            if (stored !== null) PROXY_ORIGIN = parseProxyOrigin(stored);
-        } catch (e) { }
-        {
-            // Read off the real URL: in a written-out window there is no search.
-            const preset = parseProxyOrigin(PX.here && PX.here.searchParams.get('proxy'));
-            if (preset) {
-                PROXY_ORIGIN = preset;
-                try { localStorage.setItem(PROXY_KEY, preset); } catch (e) { }
-            }
         }
 
         const NO_ICON = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAMAAACdt4HsAAAACVBMVEWVmqCRl5yYnqR1edwxAAAAA3RSTlMHiviNM9i0AAAA9ElEQVR42u2XMQ4DIQwEPfz/0alC47PHREJpbssTO7KBW5l41QjWFhy7VxKndkGY3RFud4T7zwl5fSaO/VTYkZ+uLffT97XM7/va7j/hAOZ+GJ6mtK9NIH4tYYPFbzudPk5L8AaypAAHYAXEmpcgN1ABCEB7oD9aB1SXa8t60KD4PwABeN4+J61UCEUJhAG2KAJzKWArnWpECECS5xiwJgDGwVFcfbwEiZ/fADEEEKEBigE0QBXgCe6A8wDtV/oPy1ePC9HMoE8GzwxkiFAC4s9ygA1JAsDHtA7Aqv1OwBLiaNS9Omw7gYsPDkdw89Hlz75XtT46qA3Em0wn6wAAAABJRU5ErkJggg==';
@@ -1691,61 +1633,17 @@
         let engineFailed = false;
         let engineError = '';
 
-        // Only checks that the proxy answers; tabs load either way. Runs at startup
-        // and again whenever settings is shown while the proxy isn't known to work.
+        // The worker reports itself; tabs load either way. Runs at startup and
+        // again whenever settings is shown while it isn't known to have come up.
         async function initProxy() {
-            const origin = PROXY_ORIGIN;
-            if (!origin) { renderAllSettings(); return; }
-            if (origin === PX.proxy) {
-                // The built-in proxy: its own worker says whether it installed,
-                // which a request to the static page it is served by would not.
-                const r = await PX.ready;
-                if (origin !== PROXY_ORIGIN || engineReady) return;
-                if (r.ok) { markProxyReady(); return; }
-                engineFailed = true;
-                engineError = r.error || '';
-                console.error('The built-in proxy did not start', r.error);
-                renderAllSettings();
-                return;
-            }
-            try {
-                await fetch(origin + '/', { mode: 'no-cors', cache: 'no-store' });
-                // The proxy may have been changed while this was in flight.
-                if (origin === PROXY_ORIGIN) markProxyReady();
-                return;
-            } catch (err) {
-                if (origin !== PROXY_ORIGIN || engineReady) return;
-                engineFailed = true;
-                console.error('Proxy unreachable at ' + origin, err);
-            }
+            if (!PROXY_ORIGIN) { renderAllSettings(); return; }
+            const r = await PX.ready;
+            if (engineReady) return;
+            if (r.ok) { markProxyReady(); return; }
+            engineFailed = true;
+            engineError = r.error || '';
+            console.error('The proxy did not start', r.error);
             renderAllSettings();
-        }
-
-        // Saves a new proxy address, reloads open sites through it, and resumes
-        // navigations that were waiting for one.
-        function setProxyOrigin(origin) {
-            const changed = origin !== PROXY_ORIGIN;
-            PROXY_ORIGIN = origin;
-            try {
-                if (origin) localStorage.setItem(PROXY_KEY, origin);
-                else localStorage.removeItem(PROXY_KEY);
-            } catch (e) { }
-            engineReady = false;
-            engineFailed = false;
-            engineError = '';
-            if (origin) {
-                tabs.forEach(t => {
-                    if (t.pendingNav) {
-                        const q = t.pendingNav;
-                        t.pendingNav = null;
-                        navigateTab(t, q);
-                    } else if (changed && t.type === 'web' && t.sframe && t.url) {
-                        t.sframe.go(t.url);
-                    }
-                });
-            }
-            renderAllSettings();
-            initProxy();
         }
         function markProxyReady() {
             engineReady = true;
@@ -1831,7 +1729,7 @@
             const api = 'https://suggestqueries.google.com/complete/search?client=firefox&q=' + encodeURIComponent(query);
             // The built-in proxy is no use to a written page: nothing controls
             // it, so the request would go straight to the static host.
-            const viaProxy = PROXY_ORIGIN && !(PX.written && PROXY_ORIGIN === PX.proxy);
+            const viaProxy = PROXY_ORIGIN && !PX.written;
             const sources = viaProxy ? [PROXY_ORIGIN + PX_PREFIX + api, api] : [api];
             for (const src of sources) {
                 try {
@@ -2356,44 +2254,8 @@
             return h;
         }
 
-        function buildProxySection(inner, tab) {
+        function buildProxySection(inner) {
             inner.appendChild(settingsSection('Proxy'));
-
-            const form = document.createElement('form');
-            form.className = 'set-field';
-            const input = document.createElement('input');
-            input.className = 'set-input set-proxy-input';
-            input.type = 'text';
-            input.spellcheck = false;
-            input.autocomplete = 'off';
-            input.setAttribute('autocapitalize', 'off');
-            input.setAttribute('aria-label', 'Proxy URL');
-            input.placeholder = PX.proxy || 'https://proxy.example.com';
-            // Keep what the user is typing when settings redraws.
-            input.value = tab.proxyDraft != null ? tab.proxyDraft : PROXY_ORIGIN;
-            input.addEventListener('input', () => { tab.proxyDraft = input.value; error.textContent = ''; });
-            const save = document.createElement('button');
-            save.type = 'submit';
-            save.className = 'set-btn';
-            save.textContent = 'Save';
-            form.append(input, save);
-            form.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const raw = input.value.trim();
-                // Emptying the field goes back to the proxy built into this page.
-                const origin = raw ? parseProxyOrigin(raw) : PX.proxy;
-                if (raw && !origin) {
-                    error.textContent = 'That doesn’t look like an http(s) address.';
-                    return;
-                }
-                tab.proxyDraft = null;
-                setProxyOrigin(origin);
-            });
-            inner.appendChild(form);
-
-            const error = document.createElement('div');
-            error.className = 'set-note set-error';
-            inner.appendChild(error);
 
             const status = document.createElement('div');
             status.className = 'set-status';
@@ -2401,7 +2263,7 @@
             dot.className = 'set-dot ' + (!PROXY_ORIGIN ? '' : engineReady ? 'ready' : engineFailed ? 'failed' : '');
             status.appendChild(dot);
             status.appendChild(document.createTextNode(
-                !PROXY_ORIGIN ? 'No proxy set'
+                !PROXY_ORIGIN ? 'No proxy'
                     : engineReady ? 'Peekaboom ready'
                         : engineFailed ? 'Peekaboom is not reachable'
                             : 'Connecting to Peekaboom…'
@@ -2415,37 +2277,32 @@
                 inner.appendChild(n);
             };
 
-            if (engineError) note(engineError, 'set-error');
-
+            // The one thing the UI cannot work around: a file has no origin, so
+            // no service worker can be installed and no site will load.
             if (!PROXY_ORIGIN) {
-                note('No proxy is set. Enter the address of a Peekaboom proxy, or leave this field empty ' +
-                    'and save to use the one built into this page' + (PX.proxy ? ' (' + PX.proxy + ')' : '') +
-                    '. Every site loads through it.');
-                if (tab.pendingNav) note('Waiting to open ' + tab.pendingNav + ' once a proxy is saved.');
-            } else if (PROXY_ORIGIN === PX.proxy) {
-                note('Sites load through this page’s own service worker, under ' + PX.prefix + '.');
-                if (PX.written) {
-                    note('This copy of the page was written into a blank window, so it can’t reach the worker ' +
-                        'itself. Sites still load through it; the first one installs it if it isn’t there yet.');
-                }
-                note('Proxied sites share this page’s origin, so a site that got out of its frame could read your ' +
-                    'tabs and bookmarks. Pointing this at a Peekaboom on another origin keeps them apart.', 'set-warn');
-            } else {
-                note('Sites load through ' + PROXY_ORIGIN + ', a separate origin from this page.');
-                const local = /^(localhost|127\.|\[::1\])/.test(new URL(PROXY_ORIGIN).hostname);
-                if (PX.origin.startsWith('https:') && PROXY_ORIGIN.startsWith('http:') && !local) {
-                    note('This page is served over https, so the browser will block an http proxy. Use an https address.', 'set-warn');
-                }
-                if (proxySite() === PX.origin) {
-                    note('The proxy shares this page’s origin, so proxied sites could read your tabs and bookmarks. ' +
-                        'Host this page somewhere else.', 'set-warn');
-                }
+                note('This page was opened as a file, so the proxy can’t run and no site will load. ' +
+                    'Put the folder on a web server, or open the page from the address it is hosted at.', 'set-warn');
+            } else if (engineFailed && engineError) {
+                note(engineError, 'set-error');
             }
+        }
 
-            note(!PX.here
-                ? 'The proxy needs this page served over http(s); opened as a file, there is no origin for a service worker to claim.'
-                : 'Bookmarklets and tab muting work from any origin by default. If the proxy was started with UI_ORIGIN set, ' +
-                    'it must include ' + PX.origin + ' (or *).');
+        // Re-runs the favicon refresh at the end of this file. The icon can be
+        // left stale by a browser that fetched it before the page was written.
+        function buildFaviconSection(inner) {
+            inner.appendChild(settingsSection('Favicon'));
+
+            const row = document.createElement('div');
+            row.className = 'set-field';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'set-btn';
+            btn.textContent = 'Refresh favicon';
+            btn.addEventListener('click', () => {
+                if (typeof window.refreshFavicon === 'function') window.refreshFavicon();
+            });
+            row.appendChild(btn);
+            inner.appendChild(row);
         }
 
         function buildWindowSection(inner) {
@@ -2483,11 +2340,6 @@
                 row.append(name, del);
                 inner.appendChild(row);
             });
-
-            const note = document.createElement('div');
-            note.className = 'set-note';
-            note.textContent = 'Removing a site makes Knoiren ask again the next time it tries to open a window.';
-            inner.appendChild(note);
         }
 
         function renderSettings(tab) {
@@ -2500,8 +2352,9 @@
             title.textContent = 'Settings';
             inner.appendChild(title);
 
-            buildProxySection(inner, tab);
+            buildProxySection(inner);
             buildWindowSection(inner);
+            buildFaviconSection(inner);
         }
 
         // Settings state is global, so every open settings tab has to be redrawn.
@@ -2559,7 +2412,7 @@
                 title.textContent = 'No proxy set';
                 const text = document.createElement('div');
                 text.className = 'np-text';
-                text.textContent = 'You can add one in settings.';
+                text.textContent = 'This page was opened as a file. See settings.';
                 page.append(title, text);
                 tab.panel.appendChild(page);
                 tab.noproxyEl = page;
@@ -2594,7 +2447,6 @@
             const url = normalizeUrl(query);
             if (!url) return;
             if (!PROXY_ORIGIN) {
-                tab.pendingNav = url;
                 showNoProxy(tab, url);
                 return;
             }
@@ -3524,6 +3376,8 @@
             });
         }
         setTimeout(refreshFavicon, 51);
+        // Settings offers this as a button.
+        window.refreshFavicon = refreshFavicon;
     </script> 
 </body>
 
