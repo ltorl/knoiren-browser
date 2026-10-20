@@ -1928,13 +1928,20 @@ void main() {
         // is asked to confirm first.
         // The bootstrap reloads the page when a static host served this file in
         // place of a proxied URL, so the prompt is only armed on the UI itself.
+        function warnOnClose(e) {
+            e.preventDefault();
+            // Older browsers need one of these; the text itself is always ignored.
+            e.returnValue = '';
+            return '';
+        }
         if (PX.home) {
-            window.addEventListener('beforeunload', (e) => {
-                e.preventDefault();
-                // Older browsers need one of these; the text itself is always ignored.
-                e.returnValue = '';
-                return '';
-            });
+            window.addEventListener('beforeunload', warnOnClose);
+        }
+
+        // Once a copy of the page has the tabs, this one is on its way out and
+        // must not argue about being closed.
+        function disarmCloseWarning() {
+            window.removeEventListener('beforeunload', warnOnClose);
         }
 
         function decodeRealUrl(u) {
@@ -2916,6 +2923,17 @@ void main() {
             } catch (e) {
                 try { w.location.replace(here); } catch (e2) { }
                 return 'The window opened, but it could not be written to, so it shows the real address instead.';
+            }
+
+            // The copy has everything this window had, so this one gets out of
+            // the way. close() only obeys a window that a script opened, which
+            // this one need not be; the warning stays off whether it goes or
+            // not, so closing it by hand is not argued with either.
+            disarmCloseWarning();
+            try { window.close(); } catch (e) { }
+            await new Promise(r => setTimeout(r, 300));
+            if (!window.closed) {
+                return 'The copy is open in the new window. This window may only be closed by a script that opened it, so close it by hand \u2014 it will not ask.';
             }
             return '';
         }
