@@ -3122,7 +3122,7 @@ const UI_HTML = `<!DOCTYPE html>
         href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAMAAAD04JH5AAAAZlBMVEUAAAC/v7/Hv7/Hv7fFv7/Fv7rDv7/Dv7vCv7zBv7zFv73Ev73Ev7vDv73Dv7vDv73Dv7vCv73Cv7vDv73Dv7zEv7zEv7zDv7zDv7zDv7zDv7vEv73Ev7zCv73Cv7zDv73Dv7zDv7xno0nKAAAAIXRSTlMAECAgMDBAQFBfYHBwf3+AgI+PkJCfoK+/z8/f39/f7+84OiXtAAAB70lEQVR42u3azU7jMBRA4cTpJGmZGf4cMNCS3Pd/SU4XlixD7BRY2NX9VhWkyllcNbbbRimlLtHD4hULRIAFDhY9NOD6Ag54h2x0xB4aUH9ABwf5piM6aECdAXsskB9aMEID6goYIb9sDw2oJ+Ad8ssWdNCAOgJuICtm3GGEuVALDagj4MxBIhYtmh/QgLIDJvjXAyTwF02gxQ49vorqEzSgzAB/w/CCZwhuEd74HgskMCF82FjIih4aUF7AIwRH+KEyeEG4WU0tVvx7fegMQcxCA8oLcBDEQ7eDf/0EyXiAv/4OgtgLNKC8gHBgFrSIHz6SEb93xNo1GlBegEQmfHpYbeQH10BWaED5AfHC4Q9kox4aUF/ADIk4NIgWGFktUoO7QAPKC3hF7pDZQjIm5BYwDhpQXsAjtmw2TpAVbzDIHXpbaEB5AQO2bDYM4uGaER9i/oes6KEBZQV4qQG7QbxRGbCDv7HXITWoDTSgzIADJOEfmqT8QcYeGlBuwJmDJBwxoYfBWYfwUCs3gBpQdoDBDLnAlkXIDAMNKD/g0h8yTdjyQTaigQbUEeAjZghyG5HUF1oz/M01oK6AM4MTtiwu7iERBx+oAXUGeAecsLa46BD/L4zTgPoDvAEWDiPCwwgHiwH+7xpwfQFKqav0AXlzhL6TK7MLAAAAAElFTkSuQmCC">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@700&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@700&family=Quintessential&display=swap">
     <style>
         :root {
             --bg: #282828;
@@ -3158,11 +3158,40 @@ const UI_HTML = `<!DOCTYPE html>
             position: relative;
         }
 
+        /* Behind everything in the window, including the chrome, which is
+           translucent so the same animation shows blurred through it. */
+        #bg-canvas {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block;
+            z-index: 0;
+            pointer-events: none;
+            background: #000;
+        }
+
+        /* No WebGL: a still of roughly the same picture. */
+        #bg-canvas.nogl {
+            background:
+                radial-gradient(120% 78% at 50% 128%, rgba(120, 220, 205, 0.30) 0%, rgba(96, 120, 240, 0.55) 22%, rgba(78, 56, 160, 0.55) 44%, rgba(0, 0, 0, 0) 68%),
+                #000;
+        }
+
+        #app > #tabbar,
+        #app > #toolbar,
+        #app > #content {
+            position: relative;
+            z-index: 1;
+        }
+
         #tabbar {
             display: flex;
             align-items: flex-end;
             height: 40px;
-            background: var(--bg);
+            background: rgba(0, 0, 0, 0.58);
+            backdrop-filter: blur(22px) saturate(150%);
+            -webkit-backdrop-filter: blur(22px) saturate(150%);
             padding: 0 6px 0 40px;
             gap: 0;
             flex: 0 0 auto;
@@ -3249,7 +3278,7 @@ const UI_HTML = `<!DOCTYPE html>
             width: 232px;
             height: 32px;
             padding: 0 10px;
-            background: var(--bg);
+            background: rgba(46, 48, 56, 0.34);
             color: var(--muted);
             cursor: default;
             position: relative;
@@ -3282,7 +3311,7 @@ const UI_HTML = `<!DOCTYPE html>
             right: 2px;
             top: 0;
             bottom: 6px;
-            background: #474747;
+            background: rgba(46, 48, 56, 0.46);
             border-radius: 8px;
             pointer-events: none;
             z-index: -1;
@@ -3306,7 +3335,7 @@ const UI_HTML = `<!DOCTYPE html>
         }
 
         .tab.active {
-            background: var(--fg);
+            background: rgba(46, 48, 56, 0.52);
             color: var(--text);
             z-index: 1;
         }
@@ -3323,12 +3352,12 @@ const UI_HTML = `<!DOCTYPE html>
 
         .tab.active::before {
             left: -8px;
-            background: radial-gradient(circle at top left, transparent 8px, var(--fg) 8px);
+            background: radial-gradient(circle at top left, transparent 8px, rgba(46, 48, 56, 0.52) 8px);
         }
 
         .tab.active::after {
             right: -8px;
-            background: radial-gradient(circle at top right, transparent 8px, var(--fg) 8px);
+            background: radial-gradient(circle at top right, transparent 8px, rgba(46, 48, 56, 0.52) 8px);
         }
 
         .tab .favicon {
@@ -3422,7 +3451,9 @@ const UI_HTML = `<!DOCTYPE html>
         }
 
         #toolbar {
-            background: var(--fg);
+            background: rgba(46, 48, 56, 0.52);
+            backdrop-filter: blur(22px) saturate(150%);
+            -webkit-backdrop-filter: blur(22px) saturate(150%);
             flex: 0 0 auto;
             overflow: hidden;
             transition: height 0.25s ease;
@@ -3619,14 +3650,10 @@ const UI_HTML = `<!DOCTYPE html>
             -webkit-user-drag: none;
         }
 
-        #games-btn,
-        #music-btn,
         #settings-btn {
             margin-left: 2px;
         }
 
-        #games-btn img,
-        #music-btn img,
         #settings-btn img {
             width: 22px;
             height: 22px;
@@ -3634,7 +3661,6 @@ const UI_HTML = `<!DOCTYPE html>
             -webkit-user-drag: none;
         }
 
-        #games-btn.active,
         #settings-btn.active {
             background: rgba(120, 170, 255, 0.18);
         }
@@ -3821,7 +3847,7 @@ const UI_HTML = `<!DOCTYPE html>
             gap: 2px;
             height: 34px;
             padding: 0 8px;
-            background: var(--fg);
+            background: transparent;
             border-top: 1px solid rgba(255, 255, 255, 0.06);
             overflow-x: auto;
             overflow-y: hidden;
@@ -3873,7 +3899,7 @@ const UI_HTML = `<!DOCTYPE html>
         #content {
             flex: 1 1 auto;
             position: relative;
-            background: var(--bg);
+            background: transparent;
             overflow: hidden;
             overflow: clip;
         }
@@ -3900,7 +3926,7 @@ const UI_HTML = `<!DOCTYPE html>
             position: absolute;
             inset: 0;
             overflow-y: auto;
-            background: #232428;
+            background: transparent;
             color: #fff;
             display: flex;
             flex-direction: column;
@@ -3913,13 +3939,20 @@ const UI_HTML = `<!DOCTYPE html>
         }
 
         .newtab .nt-title {
-            font-family: 'Outfit', 'Inter', system-ui, sans-serif;
-            font-size: calc(var(--nt) * 1.06);
-            font-weight: 700;
-            letter-spacing: 0.5px;
-            line-height: 1.1;
-            margin-bottom: calc(var(--nt) * 0.55);
+            font-family: 'Quintessential', 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
+            font-size: calc(var(--nt) * 1.4);
+            font-weight: 400;
+            letter-spacing: 0.01em;
+            line-height: 1.0;
+            max-width: 100%;
+            padding-bottom: calc(var(--nt) * 0.12);
+            margin: 0 0 calc(var(--nt) * 0.62);
             text-align: center;
+            color: #fff;
+            text-shadow:
+                0 0 calc(var(--nt) * 0.10) rgba(255, 255, 255, 0.55),
+                0 0 calc(var(--nt) * 0.34) rgba(176, 150, 255, 0.60),
+                0 0 calc(var(--nt) * 0.90) rgba(110, 145, 255, 0.45);
         }
 
         .newtab .nt-search {
@@ -3933,14 +3966,17 @@ const UI_HTML = `<!DOCTYPE html>
             align-items: center;
             width: 100%;
             height: var(--nt);
-            background: #373942;
-            border: 1px solid #4a4c55;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.16);
             border-radius: 999px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
             transition: border-color 0.15s ease;
         }
 
         .newtab .nt-input-group:focus-within {
-            border-color: #6b6e7a;
+            border-color: rgba(255, 255, 255, 0.36);
         }
 
         .newtab .nt-input {
@@ -3958,7 +3994,7 @@ const UI_HTML = `<!DOCTYPE html>
         }
 
         .newtab .nt-input::placeholder {
-            color: rgba(255, 255, 255, 0.4);
+            color: rgba(255, 255, 255, 0.45);
         }
 
         .newtab .nt-go {
@@ -3989,10 +4025,12 @@ const UI_HTML = `<!DOCTYPE html>
             top: calc(100% + var(--nt) * 0.15);
             left: 0;
             right: 0;
-            background: #2e3036;
-            border: 1px solid #4a4c55;
+            background: rgba(22, 22, 30, 0.82);
+            border: 1px solid rgba(255, 255, 255, 0.14);
             border-radius: calc(var(--nt) * 0.4);
-            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+            box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
             padding: 6px;
             z-index: 5;
             display: none;
@@ -4014,7 +4052,7 @@ const UI_HTML = `<!DOCTYPE html>
         }
 
         .newtab .nt-suggest .suggest-item.active {
-            background: #3d4049;
+            background: rgba(255, 255, 255, 0.14);
             color: #fff;
         }
 
@@ -4022,13 +4060,52 @@ const UI_HTML = `<!DOCTYPE html>
             position: absolute;
             right: calc(var(--nt) * 0.3);
             bottom: calc(var(--nt) * 0.2);
-            color: #fff;
-            font-size: max(12px, calc(var(--nt) * 0.22));
+            color: rgba(255, 255, 255, 0.72);
+            font-size: max(15px, calc(var(--nt) * 0.3));
             text-decoration: none;
         }
 
         .newtab .nt-github:hover {
             text-decoration: underline;
+        }
+
+        .newtab .nt-links {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: calc(var(--nt) * 0.17);
+            margin-top: calc(var(--nt) * 0.52);
+        }
+
+        .newtab .nt-link {
+            display: inline-flex;
+            align-items: center;
+            gap: calc(var(--nt) * 0.14);
+            height: calc(var(--nt) * 0.62);
+            padding: 0 calc(var(--nt) * 0.36);
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            color: rgba(255, 255, 255, 0.88);
+            font-size: max(11px, calc(var(--nt) * 0.23));
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+
+        .newtab .nt-link:hover {
+            background: rgba(255, 255, 255, 0.15);
+            border-color: rgba(255, 255, 255, 0.30);
+            color: #fff;
+        }
+
+        .newtab .nt-link img {
+            width: calc(var(--nt) * 0.27);
+            height: calc(var(--nt) * 0.27);
+            object-fit: contain;
+            pointer-events: none;
         }
 
         #ctx-menu {
@@ -4208,6 +4285,95 @@ const UI_HTML = `<!DOCTYPE html>
 
 <body>
     <div id="app">
+        <canvas id="bg-canvas"></canvas>
+
+    <!-- The background. Not the clip it imitates: a noise field read through
+         two layers of itself, seeded at random each launch and advanced by a
+         clock that never wraps, so it drifts forever without repeating. -->
+    <script type="x-shader/x-fragment" id="bg-frag">
+precision highp float;
+
+uniform vec2  uRes;
+uniform float uTime;
+uniform vec2  uSeed;
+
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+}
+
+float vnoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+               mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.55;
+    for (int i = 0; i < 4; i++) {
+        v += a * vnoise(p);
+        p = p * 2.07 + vec2(1.7, 9.2);
+        a *= 0.42;
+    }
+    return v / 0.92;
+}
+
+void main() {
+    vec2 uv = gl_FragCoord.xy / uRes;
+    float aspect = uRes.x / uRes.y;
+    vec2 p = vec2((uv.x - 0.5) * aspect, uv.y);
+
+    float t = uTime;
+    vec2 s = uSeed;
+
+    // Domain warp: noise read through two layers of noise, which is what gives
+    // the folds their silk drift. Low frequency, so they stay broad sheets
+    // instead of breaking up into smoke.
+    vec2 q = vec2(fbm(p * 0.85 + s + vec2(0.0, t * 0.030)),
+                  fbm(p * 0.85 + s + vec2(5.2, 1.3) - vec2(t * 0.024, 0.0)));
+    vec2 r = vec2(fbm(p * 0.85 + 2.1 * q + vec2(1.7, 9.2) + t * 0.040),
+                  fbm(p * 0.85 + 2.1 * q + vec2(8.3, 2.8) - t * 0.032));
+    float f = fbm(p * 0.95 + 2.0 * r);
+
+    // The dark half is a disc centred above the top of the screen. The folds
+    // crawl along its edge, so the edge itself is pushed about by the field and
+    // the sheet rises out of the bottom corners.
+    vec2 c = vec2(0.0, 1.55);
+    float d = length(p - c);
+    float edge = d - (1.30 + 0.24 * (f - 0.5));
+
+    float body = smoothstep(-0.02, 0.22, edge);
+    float rim = exp(-edge * edge / 0.0030);
+    // A wide bloom carried up into the dark, so the chrome blurring this has
+    // something that changes behind it rather than flat black.
+    float halo = exp(min(edge, 0.0) * 2.6);
+
+    vec3 deep   = vec3(0.13, 0.08, 0.38);
+    vec3 violet = vec3(0.56, 0.42, 0.95);
+    vec3 blue   = vec3(0.33, 0.58, 0.95);
+    vec3 teal   = vec3(0.36, 0.92, 0.80);
+
+    float g = smoothstep(0.18, 0.78, f);
+    float b = smoothstep(0.45, 0.95, r.x + 0.25 * f);
+    vec3 col = mix(deep, violet, g);
+    col = mix(col, blue, b * 0.55);
+    col = mix(col, teal, rim * smoothstep(0.40, 0.85, f) * 0.95);
+
+    // Light pools in some folds and leaves others in shadow, the way the sheet
+    // is lit from one side.
+    float pool = smoothstep(0.1, 0.9, fbm(p * 0.7 + 1.3 * r + vec2(0.0, t * 0.022)));
+    float lum = body * (0.22 + 0.80 * pool + 0.35 * g) + rim * 0.85;
+    col = col * lum + col * halo * 0.20;
+
+    // Dither, so the long gradients do not band.
+    col += (hash(gl_FragCoord.xy + uSeed) - 0.5) / 220.0;
+
+    gl_FragColor = vec4(col, 1.0);
+}
+    </script>
+
         <button id="collapse-btn" class="icon-btn" title="Hide toolbar"></button>
 
         <div id="tabbar">
@@ -4226,8 +4392,6 @@ const UI_HTML = `<!DOCTYPE html>
                         placeholder="Search DuckDuckGo or enter a URL">
                     <button id="star-btn" class="icon-btn" title="Bookmark this page"></button>
                 </div>
-                <button id="games-btn" class="icon-btn nav-btn" title="Games"></button>
-                <button id="music-btn" class="icon-btn nav-btn" title="Music"></button>
                 <button id="settings-btn" class="icon-btn nav-btn" title="Settings"></button>
             </div>
             <div id="bookmarksbar"></div>
@@ -4265,6 +4429,13 @@ const UI_HTML = `<!DOCTYPE html>
             'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
             '<circle cx="6.5" cy="17.5" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/>' +
             '<path d="M9 17.5V6l11-2v11.5"/>' +
+            '</svg>'
+        );
+        const MOVIES_ICON = 'data:image/svg+xml,' + encodeURIComponent(
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#e8e8e8" ' +
+            'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">' +
+            '<rect x="2.5" y="4.5" width="19" height="15" rx="2.2"/>' +
+            '<path d="M7.5 4.5v15M16.5 4.5v15M2.5 9.5h5M2.5 14.5h5M16.5 9.5h5M16.5 14.5h5"/>' +
             '</svg>'
         );
         const SITE_ICON = 'data:image/png;base64,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';
@@ -4912,18 +5083,120 @@ const UI_HTML = `<!DOCTYPE html>
             }
         }
 
+        // ---- Background ---------------------------------------------------
+        // One canvas behind the whole window; the chrome is translucent, so the
+        // same animation is what blurs through the tab bar and toolbar. The
+        // clock is never wrapped and the seed is drawn once per launch, so this
+        // is not a loop -- no two runs, and no two moments, repeat.
+        const BG_PAUSE_KEY = 'knoiren-bg-paused';
+        let bgPaused = false;
+        try { bgPaused = localStorage.getItem(BG_PAUSE_KEY) === '1'; } catch (e) { }
+        let bgKick = null;
+
+        function startBackground() {
+            const canvas = document.getElementById('bg-canvas');
+            const frag = document.getElementById('bg-frag');
+            if (!canvas || !frag) return;
+
+            let gl = null;
+            try {
+                gl = canvas.getContext('webgl', { antialias: false, alpha: false, depth: false, powerPreference: 'low-power' });
+            } catch (e) { gl = null; }
+            if (!gl) { canvas.classList.add('nogl'); return; }
+
+            const VERT = 'attribute vec2 aPos; void main(){ gl_Position = vec4(aPos, 0.0, 1.0); }';
+            const compile = (type, source) => {
+                const s = gl.createShader(type);
+                gl.shaderSource(s, source);
+                gl.compileShader(s);
+                if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+                return s;
+            };
+
+            let prog;
+            try {
+                prog = gl.createProgram();
+                gl.attachShader(prog, compile(gl.VERTEX_SHADER, VERT));
+                gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, frag.textContent));
+                gl.linkProgram(prog);
+                if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+            } catch (e) {
+                // An old driver, or a blocklisted one. The gradient stands in.
+                console.warn('Background shader did not build:', e);
+                canvas.classList.add('nogl');
+                return;
+            }
+            gl.useProgram(prog);
+
+            const buf = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+            const aPos = gl.getAttribLocation(prog, 'aPos');
+            gl.enableVertexAttribArray(aPos);
+            gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+            const uRes = gl.getUniformLocation(prog, 'uRes');
+            const uTime = gl.getUniformLocation(prog, 'uTime');
+            const uSeed = gl.getUniformLocation(prog, 'uSeed');
+            gl.uniform2f(uSeed, Math.random() * 100, Math.random() * 100);
+
+            // Half resolution: the field holds no detail finer than that, and
+            // the upscale is the softness the look wants anyway.
+            let w = 0, h = 0;
+            const size = () => {
+                const nw = Math.max(2, Math.round(canvas.clientWidth * 0.5));
+                const nh = Math.max(2, Math.round(canvas.clientHeight * 0.5));
+                if (nw === w && nh === h) return;
+                w = nw; h = nh;
+                canvas.width = w;
+                canvas.height = h;
+                gl.viewport(0, 0, w, h);
+                gl.uniform2f(uRes, w, h);
+            };
+
+            let clock = 0, last = 0, raf = 0;
+            const frame = (now) => {
+                raf = 0;
+                // Only the gap between frames is added, so a pause and a
+                // backgrounded window leave no jump behind them.
+                if (last) clock += Math.min(now - last, 100) / 1000;
+                last = now;
+                size();
+                gl.uniform1f(uTime, clock);
+                gl.drawArrays(gl.TRIANGLES, 0, 3);
+                if (!bgPaused) raf = requestAnimationFrame(frame);
+            };
+
+            bgKick = () => {
+                if (raf) return;
+                last = 0;
+                raf = requestAnimationFrame(frame);
+            };
+            // Paused still has to redraw once at the new size.
+            addEventListener('resize', () => bgKick());
+            bgKick();
+        }
+
+        function setBgPaused(paused) {
+            bgPaused = !!paused;
+            try { localStorage.setItem(BG_PAUSE_KEY, bgPaused ? '1' : '0'); } catch (e) { }
+            if (!bgPaused && bgKick) bgKick();
+            renderAllSettings();
+        }
+
         function buildNewtab(tab) {
             const nt = document.createElement('div');
             nt.className = 'newtab';
 
             const title = document.createElement('h1');
             title.className = 'nt-title';
-            title.textContent = 'Knoiren Browser';
+            title.textContent = 'knoiren browser';
 
             const group = document.createElement('div');
             group.className = 'nt-input-group';
             const input = document.createElement('input');
             input.className = 'nt-input';
+            input.placeholder = 'Search anything...';
             input.setAttribute('aria-label', 'Search with DuckDuckGo or enter URL');
             input.spellcheck = false;
             const go = document.createElement('button');
@@ -4942,6 +5215,31 @@ const UI_HTML = `<!DOCTYPE html>
             search.append(group, suggest);
             attachSuggestions(input, suggest, (val) => navigateTab(tab, val));
 
+            // Games and Music are pages of their own, written into a frame.
+            // Movies is an ordinary site, so its pill navigates the tab.
+            const links = document.createElement('div');
+            links.className = 'nt-links';
+            [
+                { key: 'games', title: 'Games', icon: GAMES_ICON },
+                { key: 'music', title: 'Music', icon: MUSIC_ICON },
+                { url: 'https://flystream.net/', title: 'Movies', icon: MOVIES_ICON },
+            ].forEach(item => {
+                const pill = document.createElement('button');
+                pill.type = 'button';
+                pill.className = 'nt-link';
+                const img = document.createElement('img');
+                img.src = item.icon;
+                img.alt = '';
+                const label = document.createElement('span');
+                label.textContent = item.title;
+                pill.append(img, label);
+                pill.addEventListener('click', () => {
+                    if (item.key) openWebpage(item.key);
+                    else navigateTab(tab, item.url);
+                });
+                links.appendChild(pill);
+            });
+
             const github = document.createElement('a');
             github.className = 'nt-github';
             github.href = 'https://github.com/ltorl/knoiren-browser/tree/main';
@@ -4955,7 +5253,7 @@ const UI_HTML = `<!DOCTYPE html>
             github.addEventListener('click', openGithub);
             github.addEventListener('auxclick', openGithub);
 
-            nt.append(title, search, github);
+            nt.append(title, search, links, github);
             tab.panel.appendChild(nt);
             tab.newtabEl = nt;
         }
@@ -5055,6 +5353,34 @@ const UI_HTML = `<!DOCTYPE html>
             inner.appendChild(note);
         }
 
+        function buildBackgroundSection(inner) {
+            inner.appendChild(settingsSection('Background'));
+
+            [
+                { paused: false, name: 'Animated', desc: 'The background drifts on its own, from a seed drawn fresh every time the browser starts.' },
+                { paused: true, name: 'Paused', desc: 'The background holds the frame it is on. Nothing is drawn until you turn it back on.' },
+            ].forEach(opt => {
+                const row = document.createElement('div');
+                row.className = 'set-option' + (bgPaused === opt.paused ? ' selected' : '');
+
+                const radio = document.createElement('span');
+                radio.className = 'set-radio';
+
+                const body = document.createElement('div');
+                const name = document.createElement('div');
+                name.className = 'set-name';
+                name.textContent = opt.name;
+                const desc = document.createElement('div');
+                desc.className = 'set-desc';
+                desc.textContent = opt.desc;
+                body.append(name, desc);
+
+                row.append(radio, body);
+                row.addEventListener('click', () => setBgPaused(opt.paused));
+                inner.appendChild(row);
+            });
+        }
+
         function renderSettings(tab) {
             if (!tab.settingsEl) return;
             const inner = tab.settingsEl.querySelector('.set-inner');
@@ -5066,6 +5392,7 @@ const UI_HTML = `<!DOCTYPE html>
             inner.appendChild(title);
 
             buildProxySection(inner);
+            buildBackgroundSection(inner);
             buildWindowSection(inner);
         }
 
@@ -6018,14 +6345,6 @@ const UI_HTML = `<!DOCTYPE html>
         document.getElementById('btn-reload').appendChild(imgEl(ICON_RELOAD));
         starBtn.appendChild(imgEl(STAR_OFF));
 
-        const gamesBtn = document.getElementById('games-btn');
-        gamesBtn.appendChild(imgEl(GAMES_ICON));
-        gamesBtn.addEventListener('click', () => openWebpage('games'));
-
-        const musicBtn = document.getElementById('music-btn');
-        musicBtn.appendChild(imgEl(MUSIC_ICON));
-        musicBtn.addEventListener('click', () => openWebpage('music'));
-
         // Browsers without overflow: clip still let a page inside a tab scroll this
         // document (and #content) sideways; snap them back.
         for (const el of [document.documentElement, document.body, document.getElementById('content')]) {
@@ -6095,6 +6414,7 @@ const UI_HTML = `<!DOCTYPE html>
             }
         });
 
+        startBackground();
         renderBookmarks();
         initProxy();
         createTab();
