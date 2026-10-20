@@ -1652,6 +1652,10 @@ void main() {
                     // Nothing else can install it: there is no copy of this
                     // file under the host's 404 page to catch a proxied request
                     // and retry, so the worker has to be there before any frame.
+                    // Settings writes its copy from a page the worker already
+                    // controls, and says so: a worker claims frames by scope,
+                    // whoever registered it.
+                    if (window.__px_installed) return Promise.resolve({ ok: true });
                     return install(WISP);
                 }
                 return sw.register(BASE + 'sw.js', { scope: BASE }).then(active).then(function (reg) {
@@ -1843,6 +1847,7 @@ void main() {
             if (d.__px === 'nav') {
                 // Tell the page we handle its new windows as tabs.
                 sendToFrame(e.source, { __px: 'host' });
+                applyRememberedMute(tab, decodeRealUrl(String(d.url || '')));
                 // A new document starts unmuted, so a muted tab says it again.
                 if (tab.muted) sendToFrame(e.source, { __px: 'mute', muted: true });
                 setTabAudible(tab, !!d.audible);
@@ -2380,9 +2385,39 @@ void main() {
         const SPEAKER_MUTED_SVG = '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 6h2.5l3.5-3v10l-3.5-3h-2.5z" fill="currentColor"/><path d="M11 6l4 4M15 6l-4 4"/></svg>';
 
         // Muting is kept per tab and sent to the page again after every navigation.
-        function setTabMuted(tab, muted) {
+        // The sites muted by hand are also remembered, so a site comes back muted
+        // in whatever tab opens it next.
+        let mutedSites = {};
+        try { mutedSites = JSON.parse(localStorage.getItem('knoiren-muted-sites') || '{}') || {}; } catch (e) { mutedSites = {}; }
+        function saveMutedSites() {
+            try { localStorage.setItem('knoiren-muted-sites', JSON.stringify(mutedSites)); } catch (e) { }
+        }
+        function urlOrigin(url) {
+            if (!/^https?:/i.test(url || '')) return '';
+            try { return new URL(url).origin; } catch (e) { return ''; }
+        }
+        // Only ever mutes: a tab muted by hand on a site nobody remembers stays
+        // muted until it is turned back off.
+        function applyRememberedMute(tab, url) {
+            const origin = urlOrigin(url);
+            if (!origin || tab.muted || !mutedSites[origin]) return;
+            tab.muted = true;
+            sendToFrame(tab.sframe && tab.sframe.frame.contentWindow, { __px: 'mute', muted: true });
+            updateTabEl(tab);
+        }
+
+        // remember is off for the mute a remembered site or a cleared one causes,
+        // which must not write the list it is reading.
+        function setTabMuted(tab, muted, remember = true) {
             tab.muted = !!muted;
             sendToFrame(tab.sframe && tab.sframe.frame.contentWindow, { __px: 'mute', muted: tab.muted });
+            const origin = remember ? urlOrigin(tab.url) : '';
+            if (origin) {
+                if (tab.muted) mutedSites[origin] = 1;
+                else delete mutedSites[origin];
+                saveMutedSites();
+                renderAllSettings();
+            }
             updateTabEl(tab);
         }
 
@@ -2596,10 +2631,18 @@ void main() {
             const shareLink = document.createElement('a');
             shareLink.href = 'https://tinu.be/kpb';
             shareLink.textContent = 'tinu.be/kpb';
-            share.append('Share with ', shareLink);
+            // The page's own address, left as a plain link so it can be dragged
+            // onto the real browser's bookmarks bar.
+            const siteLink = document.createElement('a');
+            siteLink.className = 'nt-bookmark';
+            siteLink.href = 'https://ltorl.github.io/knoiren-browser';
+            siteLink.textContent = 'knoiren';
+            share.append('Share with ', shareLink, '\u00a0\u00a0\u00a0-\u00a0\u00a0\u00a0', siteLink);
             // Opens in a tab of the real browser, not a Knoiren tab.
             shareLink.target = '_blank';
             shareLink.rel = 'noopener';
+            siteLink.target = '_blank';
+            siteLink.rel = 'noopener';
 
             nt.append(title, search, links, github, share);
             tab.panel.appendChild(nt);
@@ -2760,6 +2803,114 @@ void main() {
             inner.appendChild(row);
         }
 
+        // A second copy of the browser in an about:blank window, which carries no
+        // address of its own. This file is fetched and written into the window,
+        // so the copy is the window's own document rather than a frame in it.
+        let blankNote = '';
+
+        function buildBlankSection(inner) {
+            inner.appendChild(settingsSection('Open in about:blank'));
+
+            const row = document.createElement('div');
+            row.className = 'set-field';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'set-btn';
+            btn.textContent = 'Open in new window';
+            btn.addEventListener('click', async () => {
+                btn.disabled = true;
+                blankNote = 'Opening…';
+                renderAllSettings();
+                blankNote = await openInBlank();
+                renderAllSettings();
+            });
+            row.appendChild(btn);
+            inner.appendChild(row);
+
+            const note = document.createElement('div');
+            note.className = 'set-note' + (blankNote ? ' set-warn' : '');
+            note.textContent = blankNote
+                || 'Opens this browser again in a window whose address stays about:blank. ' +
+                   'The window needs pop-ups allowed for this page, and it keeps nothing of its own: ' +
+                   'the tabs, the relay and the sites remembered here are shared.';
+            inner.appendChild(note);
+        }
+
+        async function openInBlank() {
+            const here = location.href;
+            // The window is opened first, while the click is still what is
+            // happening; a pop-up asked for after the fetch is blocked instead.
+            let w = null;
+            try { w = window.open('about:blank', '_blank'); } catch (e) { }
+            if (!w || !w.document) return 'The window did not open. Allow pop-ups for this page and try again.';
+
+            let html = '';
+            try {
+                const r = await fetch(here, { cache: 'no-store', credentials: 'same-origin' });
+                if (!r.ok) throw new Error('the server answered ' + r.status);
+                html = await r.text();
+            } catch (e) {
+                try { w.close(); } catch (e2) { }
+                return 'This page could not be fetched to write into the window: ' + (e.message || e) + '.';
+            }
+
+            try {
+                // A written document may not touch its own service worker
+                // container, so the copy is told the worker is already there;
+                // it claims the copy's proxied frames by scope all the same.
+                w.__px_installed = !!(window.__px_installed
+                    || (navigator.serviceWorker && navigator.serviceWorker.controller));
+                // about:blank inherits this page's address and origin, so the
+                // copy's relative URLs and the proxy under them still resolve
+                // from a window with no address of its own.
+                w.document.write(html);
+                w.document.close();
+            } catch (e) {
+                try { w.location.replace(here); } catch (e2) { }
+                return 'The window opened, but it could not be written to, so it shows the real address instead.';
+            }
+            return '';
+        }
+
+        function buildMutedSection(inner) {
+            inner.appendChild(settingsSection('Muted sites'));
+
+            const muted = Object.keys(mutedSites).sort();
+
+            if (!muted.length) {
+                const empty = document.createElement('div');
+                empty.className = 'set-empty';
+                empty.textContent = 'No sites yet. When you mute a tab, the site it is on is remembered here and opens muted next time.';
+                inner.appendChild(empty);
+                return;
+            }
+
+            muted.forEach(origin => {
+                const row = document.createElement('div');
+                row.className = 'set-site';
+
+                const name = document.createElement('span');
+                name.className = 'set-site-name';
+                name.textContent = origin.replace(/^https?:\/\//, '');
+                name.title = origin;
+
+                const del = document.createElement('button');
+                del.className = 'set-del';
+                del.title = 'Unmute ' + origin;
+                del.setAttribute('aria-label', 'Unmute ' + origin);
+                del.addEventListener('click', () => {
+                    delete mutedSites[origin];
+                    saveMutedSites();
+                    // The tabs already on the site follow the list.
+                    tabs.forEach(t => { if (t.muted && urlOrigin(t.url) === origin) setTabMuted(t, false, false); });
+                    renderAllSettings();
+                });
+
+                row.append(name, del);
+                inner.appendChild(row);
+            });
+        }
+
         function buildWindowSection(inner) {
             inner.appendChild(settingsSection('Sites that can open new windows'));
 
@@ -2837,9 +2988,11 @@ void main() {
 
             buildProxySection(inner);
             buildWispSection(inner);
+            buildBlankSection(inner);
+            buildFaviconSection(inner);
             buildBackgroundSection(inner);
             buildWindowSection(inner);
-            buildFaviconSection(inner);
+            buildMutedSection(inner);
         }
 
         // Settings state is global, so every open settings tab has to be redrawn.
@@ -3024,6 +3177,7 @@ void main() {
             }
             tab.type = 'web';
             tab.url = url;
+            applyRememberedMute(tab, url);
             showFrame(tab);
             sframe.go(url);
             if (tab.id === activeId) syncToolbar();
