@@ -186,15 +186,17 @@ Everything is optional. Set these as environment variables:
 
 
 <details>
-<summary><b>Embedding the proxy in your own page</b></summary>
+<summary><b>Embedding the proxy in your own site</b></summary>
 
 <br>
 
 Peekaboom works without the UI too. Any page can frame a proxied site:
 
 ```html
-<iframe src="https://peekaboom.github.io/__px/https://example.com/"></iframe>
+<iframe src="https://peekaboom-proxy.github.io/__px/https://example.com/"></iframe>
 ```
+
+This will use `wss://anura.pro`. This is the same proxying logic used in this site.
 
 </details>
 
