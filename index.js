@@ -4061,6 +4061,7 @@ const UI_HTML = `<!DOCTYPE html>
             right: calc(var(--nt) * 0.3);
             bottom: calc(var(--nt) * 0.2);
             color: rgba(255, 255, 255, 0.72);
+            font-family: 'Quintessential', 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
             font-size: max(15px, calc(var(--nt) * 0.3));
             text-decoration: none;
         }
