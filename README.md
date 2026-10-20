@@ -183,26 +183,7 @@ Everything is optional. Set these as environment variables:
 | `UI_PORT`      | `8080`    | Port for the browser UI                                                      |
 | `PORT`         | `8787`    | Port for the proxy                                                           |
 | `HOST`         | `0.0.0.0` | Interface both servers listen on                                             |
-| `PROXY_ORIGIN` | *(auto)*  | Public address of the proxy, if it's behind a reverse proxy (e.g. `https://proxy.example.com`) |
-| `UI_ORIGIN`    | *(auto)*  | Public address of the UI, as the browser sees it                             |
-| `NO_COLOR`     | *(unset)* | Turns off the colorful startup banner                                        |
 
-<details>
-<summary><b>Deploying behind a reverse proxy</b></summary>
-
-<br>
-
-Give the UI and the proxy their own hostnames, and tell Knoiren where they are:
-
-```bash
-PROXY_ORIGIN=https://proxy.example.com \
-UI_ORIGIN=https://browse.example.com \
-node index.js
-```
-
-Point `browse.example.com` at port `8080` and `proxy.example.com` at port `8787`. Keep them on **different hostnames**, because that separation is what keeps sites away from the UI.
-
-</details>
 
 <details>
 <summary><b>Embedding the proxy in your own page</b></summary>
@@ -212,7 +193,7 @@ Point `browse.example.com` at port `8080` and `proxy.example.com` at port `8787`
 Peekaboom works without the UI too. Any page can frame a proxied site:
 
 ```html
-<iframe src="http://localhost:8787/__px/https://example.com/"></iframe>
+<iframe src="https://peekaboom.github.io/__px/https://example.com/"></iframe>
 ```
 
 </details>
