@@ -16,46 +16,17 @@ Zero-dependency!
 
 </div>
 
-<br>
+## Running statically through wisp
 
-## Quick start
+### Structure
 
-One line, no cloning:
-
-```bash
-curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | node
 ```
-
-Then open **http://localhost:8080**.
-
-<br>
-
-<details>
-<summary><b>Other ways to run it</b></summary>
-
-<br>
-
-**From a clone**
-
-```bash
-git clone https://github.com/ltorl/knoiren-browser
-cd knoiren-browser
-node index.js
+knoiren-browser/
+├── index.html      Opens v2 in about:blank and registers sw
+├── open.svg        Opens v2 in about:blank and registers sw    (from svg to use jsdelivr unblocking exploit)
+├── sw.js           Proxying logic with rewriter
+└── v2.html         Whole UI
 ```
-
-**Older Node** (before 22.7 / 20.19) needs to be told the piped code is a module:
-
-```bash
-curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | node --input-type=module
-```
-
-**Custom ports**
-
-```bash
-curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 UI_PORT=9001 node
-```
-
-</details>
 
 <br>
 
@@ -96,6 +67,56 @@ https://code.webcache.cn/gh/ltorl/knoiren-browser/open.svg
 ```
 
 These wont be blocked because it would break real school sites. <br>
+
+<br>
+
+## Running through node backend
+
+### Structure
+
+```
+knoiren-browser/
+└── index.js         Whole UI + Proxying logic
+```
+
+## Quick start
+
+One line, no cloning:
+
+```bash
+curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | node
+```
+
+Then open **http://localhost:8080**.
+
+<br>
+
+<details>
+<summary><b>Other ways to run it</b></summary>
+
+<br>
+
+**From a clone**
+
+```bash
+git clone https://github.com/ltorl/knoiren-browser
+cd knoiren-browser
+node index.js
+```
+
+**Older Node** (before 22.7 / 20.19) needs to be told the piped code is a module:
+
+```bash
+curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | node --input-type=module
+```
+
+**Custom ports**
+
+```bash
+curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 UI_PORT=9001 node
+```
+
+</details>
 
 <br>
 
