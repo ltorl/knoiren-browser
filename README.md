@@ -63,17 +63,17 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 
 #### Main link: https://ltorl.github.io/knoiren-browser
 
+Other main links:
+1. https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/open.svg
+2. https://cdn.jsdelivr.net/npm/knoiren-browser/open.svg
+
 <br>
 
 Other links:
 ```
-best:
-https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/open.svg
 https://esm.sh/gh/ltorl/knoiren-browser/open.svg
 https://cdn.esm.sh/gh/ltorl/knoiren-browser/open.svg
 https://cdn.statically.io/gh/ltorl/knoiren-browser/open.svg
-
-other:
 https://cdn.jsdelivr.net.cn/gh/ltorl/knoiren-browser/open.svg
 https://jsdelivr.cdn.net/gh/ltorl/knoiren-browser/open.svg
 https://cdn.jsdelivr.us/gh/ltorl/knoiren-browser/open.svg
