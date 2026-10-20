@@ -1030,12 +1030,28 @@
             right: calc(var(--nt) * 0.3);
             bottom: calc(var(--nt) * 0.2);
             color: rgba(255, 255, 255, 0.72);
-            font-family: 'Quintessential', 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
-            font-size: max(15px, calc(var(--nt) * 0.3));
+            font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+            font-weight: 700;
+            font-size: max(19px, calc(var(--nt) * 0.4));
             text-decoration: none;
         }
 
         .newtab .nt-github:hover {
+            text-decoration: underline;
+        }
+
+        .newtab .nt-share {
+            position: absolute;
+            right: calc(var(--nt) * 0.3);
+            top: calc(var(--nt) * 0.2);
+            color: rgba(255, 255, 255, 0.72);
+            font-family: 'Outfit', 'Inter', system-ui, sans-serif;
+            font-weight: 700;
+            font-size: max(19px, calc(var(--nt) * 0.4));
+            cursor: pointer;
+        }
+
+        .newtab .nt-share:hover {
             text-decoration: underline;
         }
 
@@ -2569,7 +2585,19 @@ void main() {
             github.addEventListener('click', openGithub);
             github.addEventListener('auxclick', openGithub);
 
-            nt.append(title, search, links, github);
+            // Copies the short link so it can be pasted to a friend.
+            const share = document.createElement('div');
+            share.className = 'nt-share';
+            share.textContent = 'Share with tinu.be/kpb';
+            share.title = 'Copy link';
+            share.addEventListener('click', () => {
+                navigator.clipboard.writeText('https://tinu.be/kpb').then(() => {
+                    share.textContent = 'Copied!';
+                    setTimeout(() => { share.textContent = 'Share with tinu.be/kpb'; }, 1500);
+                }, () => {});
+            });
+
+            nt.append(title, search, links, github, share);
             tab.panel.appendChild(nt);
             tab.newtabEl = nt;
         }
