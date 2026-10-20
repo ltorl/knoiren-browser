@@ -2829,10 +2829,7 @@ void main() {
 
             const note = document.createElement('div');
             note.className = 'set-note' + (blankNote ? ' set-warn' : '');
-            note.textContent = blankNote
-                || 'Opens this browser again in a window whose address stays about:blank. ' +
-                   'The window needs pop-ups allowed for this page, and it keeps nothing of its own: ' +
-                   'the tabs, the relay and the sites remembered here are shared.';
+            note.textContent = blankNote || 'Opens this page again in an about:blank window. This will hide the page from extentions';
             inner.appendChild(note);
         }
 
