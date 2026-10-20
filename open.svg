@@ -48,7 +48,6 @@
             d.write(text);
             d.close();
 
-            window.close();
         }, function (err) {
             n.document.body.textContent = 'Could not load the browser: ' + ((err && err.message) || err);
         });
