@@ -67,12 +67,15 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 
 Other links:
 ```
+best:
 https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/open.svg
-https://fastly.jsdelivr.net/gh/ltorl/knoiren-browser/open.svg
-https://testingcf.jsdelivr.net/gh/ltorl/knoiren-browser/open.svg
-https://quantil.jsdelivr.net/gh/ltorl/knoiren-browser/open.svg
-https://originfastly.jsdelivr.net/gh/ltorl/knoiren-browser/open.svg
-https://gcore.jsdelivr.net/gh/ltorl/knoiren-browser/open.svg
+https://esm.sh/gh/ltorl/knoiren-browser/open.svg
+https://cdn.esm.sh/gh/ltorl/knoiren-browser/open.svg
+https://cdn.statically.io/gh/ltorl/knoiren-browser/open.svg
+
+other:
+https://cdn.jsdelivr.net.cn/gh/ltorl/knoiren-browser/open.svg
+https://jsdelivr.cdn.net/gh/ltorl/knoiren-browser/open.svg
 https://cdn.jsdelivr.us/gh/ltorl/knoiren-browser/open.svg
 https://jsdelivr.b-cdn.net/gh/ltorl/knoiren-browser/open.svg
 https://jsdelivr.cdn.h.com/gh/ltorl/knoiren-browser/open.svg
@@ -90,11 +93,6 @@ https://jsdelivr.aby.pub/gh/ltorl/knoiren-browser/open.svg
 https://jsdelivr.topthink.com/gh/ltorl/knoiren-browser/open.svg
 https://jsd.yizex.cn/gh/ltorl/knoiren-browser/open.svg
 https://code.webcache.cn/gh/ltorl/knoiren-browser/open.svg
-https://esm.sh/gh/ltorl/knoiren-browser/open.svg
-https://cdn.esm.sh/gh/ltorl/knoiren-browser/open.svg
-https://cdn.statically.io/gh/ltorl/knoiren-browser/open.svg
-https://cdn.jsdelivr.net.cn/gh/ltorl/knoiren-browser/open.svg
-https://jsdelivr.cdn.net/gh/ltorl/knoiren-browser/open.svg
 ```
 
 These wont be blocked because it would break real school sites. <br>
