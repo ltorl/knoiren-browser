@@ -22,10 +22,8 @@ Zero-dependency!
 
 ```
 knoiren-browser/
-├── index.html      Opens v2 in about:blank and registers sw
-├── open.svg        Opens v2 in about:blank and registers sw    (from svg to use jsdelivr unblocking exploit)
-├── sw.js           Proxying logic with rewriter
-└── v2.html         Whole UI
+├── sw.js           Main proxying logic
+└── index.html      Whole UI
 ```
 
 <br>
