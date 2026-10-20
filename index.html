@@ -1060,6 +1060,37 @@
             text-decoration: underline;
         }
 
+        .newtab .nt-pipe {
+            margin-left: 0.55em;
+            padding: 0;
+            border: 0;
+            background: none;
+            color: inherit;
+            font: inherit;
+            cursor: pointer;
+        }
+
+        .newtab .nt-pipe:hover {
+            color: #fff;
+        }
+
+        /* The link slides out from behind the pipe. Its width is set in script:
+           the font is a different size at every window size, so the text it has
+           to make room for is a different number of pixels every time. */
+        .newtab .nt-reveal {
+            display: inline-block;
+            vertical-align: bottom;
+            overflow: hidden;
+            white-space: nowrap;
+            width: 0;
+            opacity: 0;
+            transition: width 0.25s ease, opacity 0.25s ease;
+        }
+
+        .newtab .nt-reveal a {
+            padding-left: 0.55em;
+        }
+
         .newtab .nt-links {
             display: flex;
             flex-wrap: wrap;
@@ -2637,7 +2668,27 @@ void main() {
             siteLink.className = 'nt-bookmark';
             siteLink.href = 'https://ltorl.github.io/knoiren-browser';
             siteLink.textContent = 'knoiren';
-            share.append('Share with ', shareLink, '\u00a0\u00a0\u00a0-\u00a0\u00a0\u00a0', siteLink);
+            // It starts tucked away behind the pipe, which slides it out and
+            // back again on every click.
+            const pipe = document.createElement('button');
+            pipe.className = 'nt-pipe';
+            pipe.type = 'button';
+            pipe.textContent = '|';
+            pipe.setAttribute('aria-expanded', 'false');
+            const reveal = document.createElement('span');
+            reveal.className = 'nt-reveal';
+            reveal.appendChild(siteLink);
+            siteLink.tabIndex = -1;
+            pipe.addEventListener('click', () => {
+                const open = !!reveal.style.width && reveal.style.width !== '0px';
+                // The clipped link keeps its own width, so it can be asked for
+                // one every time rather than remembered across a resize.
+                reveal.style.width = open ? '0px' : siteLink.offsetWidth + 'px';
+                reveal.style.opacity = open ? '0' : '1';
+                siteLink.tabIndex = open ? -1 : 0;
+                pipe.setAttribute('aria-expanded', open ? 'false' : 'true');
+            });
+            share.append('Share with ', shareLink, pipe, reveal);
             // Opens in a tab of the real browser, not a Knoiren tab.
             shareLink.target = '_blank';
             shareLink.rel = 'noopener';
