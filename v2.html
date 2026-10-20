@@ -2589,13 +2589,7 @@ void main() {
             const share = document.createElement('div');
             share.className = 'nt-share';
             share.textContent = 'Share with tinu.be/kpb';
-            share.title = 'Copy link';
-            share.addEventListener('click', () => {
-                navigator.clipboard.writeText('https://tinu.be/kpb').then(() => {
-                    share.textContent = 'Copied!';
-                    setTimeout(() => { share.textContent = 'Share with tinu.be/kpb'; }, 1500);
-                }, () => {});
-            });
+            
 
             nt.append(title, search, links, github, share);
             tab.panel.appendChild(nt);
