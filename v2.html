@@ -1048,10 +1048,15 @@
             font-family: 'Outfit', 'Inter', system-ui, sans-serif;
             font-weight: 700;
             font-size: max(19px, calc(var(--nt) * 0.4));
+        }
+
+        .newtab .nt-share a {
+            color: inherit;
+            text-decoration: none;
             cursor: pointer;
         }
 
-        .newtab .nt-share:hover {
+        .newtab .nt-share a:hover {
             text-decoration: underline;
         }
 
@@ -2585,11 +2590,16 @@ void main() {
             github.addEventListener('click', openGithub);
             github.addEventListener('auxclick', openGithub);
 
-            // Copies the short link so it can be pasted to a friend.
+            // Short link to this page, to pass on to a friend.
             const share = document.createElement('div');
             share.className = 'nt-share';
-            share.textContent = 'Share with tinu.be/kpb';
-            
+            const shareLink = document.createElement('a');
+            shareLink.href = 'https://tinu.be/kpb';
+            shareLink.textContent = 'tinu.be/kpb';
+            share.append('Share with ', shareLink);
+            // Opens in a tab of the real browser, not a Knoiren tab.
+            shareLink.target = '_blank';
+            shareLink.rel = 'noopener';
 
             nt.append(title, search, links, github, share);
             tab.panel.appendChild(nt);
