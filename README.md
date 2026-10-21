@@ -58,6 +58,16 @@ https://cdn.jsdelivr.net.cn/gh/ltorl/knoiren-svg/open.svg
 https://cdn.statically.io/gh/ltorl/knoiren-svg@main/open.svg
 ```
 
+These all use a public wisp which may have some site limitations. <br>
+
+You can run a wisp server locally with:
+
+```bash
+npx @mercuryworkshop/wisp-js
+```
+
+Then enter `ws://localhost:5001` in the settings page.
+
 <br>
 <br>
 <br>
