@@ -58,6 +58,8 @@ https://cdn.jsdelivr.net.cn/gh/ltorl/knoiren-svg/open.svg
 https://cdn.statically.io/gh/ltorl/knoiren-svg@main/open.svg
 ```
 
+<br>
+
 These all use a public wisp which may have some site limitations. <br>
 
 You can run a wisp server locally with:
