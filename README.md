@@ -51,7 +51,6 @@ https://jsdelivr.cdn.net/gh/ltorl/knoiren-svg/open.svg
 https://cdn.jsdmirror.cn/gh/ltorl/knoiren-svg/open.svg
 https://jsdelivr.aby.pub/gh/ltorl/knoiren-svg/open.svg
 https://code.webcache.cn/gh/ltorl/knoiren-svg/open.svg
-https://cdn.statically.io/gh/ltorl/knoiren-svg/open.svg
 https://jsd.proxy.aks.moe/gh/ltorl/knoiren-svg/open.svg
 https://cdn.jsdmirror.com/gh/ltorl/knoiren-svg/open.svg
 https://jsdelivr.b-cdn.net/gh/ltorl/knoiren-svg/open.svg
@@ -60,6 +59,7 @@ https://jsd.onmicrosoft.cn/gh/ltorl/knoiren-svg/open.svg
 https://cdn.onmicrosoft.cn/gh/ltorl/knoiren-svg/open.svg
 https://cdn.jsdelivr.net.cn/gh/ltorl/knoiren-svg/open.svg
 https://jsdelivr.topthink.com/gh/ltorl/knoiren-svg/open.svg
+https://cdn.statically.io/gh/ltorl/knoiren-svg@main/open.svg
 ```
 
 These wont be blocked because it would break real school sites. <br>
