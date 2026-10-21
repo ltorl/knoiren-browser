@@ -34,7 +34,7 @@ knoiren-browser/
 
 Other main links:
 1. https://cdn.jsdelivr.net/gh/ltorl/knoiren-svg/open.svg
-2. https://cdn.jsdelivr.net/npm/knoiren-svg/open.svg
+2. https://cdn.jsdelivr.net/npm/knoiren-browser/open.svg
 
 <br>
 
