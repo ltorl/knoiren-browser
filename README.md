@@ -139,7 +139,7 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 - Handles **WebSockets**, **EventSource**, **sendBeacon** and **workers**
 - A **service worker** catches requests that slip past the rewriter
 - Keeps each site's **cookies** apart
-- Patches `location`, `document.domain`, `top` / `parent` and frames so sites think they're at home
+- Patches `location`, `document.domain`, `top` / `parent` so sites think they're at home
 - Mutes **audio, video, Web Audio and speech**, even inside shadow DOM and nested frames
 
 </td>
