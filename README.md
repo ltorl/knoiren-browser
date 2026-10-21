@@ -31,7 +31,7 @@ knoiren-browser/
 
 <br>
 
-## Unblocked links
+### Unblocked links
 
 #### Main link: https://ltorl.github.io/knoiren-browser
 
@@ -71,7 +71,7 @@ knoiren-browser/
 └── index.js         Whole UI + Proxying logic
 ```
 
-## Quick start
+### Quick start
 
 One line, no cloning:
 
@@ -125,17 +125,16 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 
 - **Real tabs**: drag to reorder, pin, duplicate, close others / left / right
 - **Mute tabs**: a speaker shows on tabs playing sound; click it to silence the tab
-- **Smart address bar**: type a URL or search DuckDuckGo, with live suggestions
 - **Bookmarks bar**: star any page, and **bookmarklets** run inside the page
 - **Pop-up control**: links open as new tabs, and scripted pop-ups ask first
 - **Close warning**: will stop teacher from closing it through an extension
-
+<br>
 </td>
 <td width="50%" valign="top">
 
 ### The Peekaboom proxy
 
-- Rewrites **HTML, CSS and JavaScript** on the fly
+- Rewrites **HTML, CSS and JavaScript** as you are actively browsing
 - Handles **WebSockets**, **EventSource**, **sendBeacon** and **workers**
 - A **service worker** catches requests that slip past the rewriter
 - Keeps each site's **cookies** apart
@@ -147,10 +146,45 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 </table>
 
 <br>
+<br>
+<br>
 
+<details>
+<summary>
+<h2>How it works - wisp proxy</h2>
+</summary>
 
+```
+                 ┌────────────────────────────┐
+  you  ───────▶  │ Knoiren UI      index.html │   tabs, bookmarks, settings
+                 └─────────────┬──────────────┘
+                               │ 
+                 ┌─────────────▼──────────────┐
+                 │ Peekaboom proxy      sw.js │   fetches + rewrites every page
+                 └─────────────┬──────────────┘
+                               ▼
+                 ┌─────────────▼──────────────┐
+                 │ Wisp server          [set] │   forwards fetch request
+                 └─────────────┬──────────────┘
+                               ▼
+                         the real web
+                          
+```
 
 <br>
+
+### Configuration 
+
+Everything is optional. Set these as environment variables:
+
+| Setting        | Default           | What it does                                                                 |
+| -------------- | ----------------- | ---------------------------------------------------------------------------- |
+| `WISP RELAY`   | `wss://anura.pro` | forwards fetch request                                                       |
+
+
+</details>
+
+
 
 <details>
 <summary>
@@ -203,4 +237,12 @@ Peekaboom works without the UI too. Any page can frame a proxied site:
 This will use `wss://anura.pro`. This is the same proxying logic used in this site.
 
 </details>
+
+
+<br>
+<br>
+<br>
+<br>
+<br>
+<br>
 
