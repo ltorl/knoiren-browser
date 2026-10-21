@@ -188,7 +188,7 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 
 ### Configuration 
 
-Everything is optional. Set these as environment variables:
+Everything is optional. Set these in settings:
 
 | Setting        | Default           | What it does                                                                 |
 | -------------- | ----------------- | ---------------------------------------------------------------------------- |
