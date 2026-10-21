@@ -40,8 +40,6 @@ Other main links:
 
 Other links:
 ```
-https://esm.sh/gh/ltorl/knoiren-svg/open.svg
-https://cdn.esm.sh/gh/ltorl/knoiren-svg/open.svg
 https://jsd.yizex.cn/gh/ltorl/knoiren-svg/open.svg
 https://jsd.nmmsl.top/gh/ltorl/knoiren-svg/open.svg
 https://jsd.duolaa.top/gh/ltorl/knoiren-svg/open.svg
