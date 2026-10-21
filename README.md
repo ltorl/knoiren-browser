@@ -39,6 +39,9 @@ Other main links:
 1. https://cdn.jsdelivr.net/gh/ltorl/knoiren-svg/open.svg
 2. https://cdn.jsdelivr.net/npm/knoiren-browser/open.svg
 
+These wont be blocked because it would break real school sites.
+
+<br>
 <br>
 
 Other links:
@@ -54,8 +57,6 @@ https://jsd.onmicrosoft.cn/gh/ltorl/knoiren-svg/open.svg
 https://cdn.jsdelivr.net.cn/gh/ltorl/knoiren-svg/open.svg
 https://cdn.statically.io/gh/ltorl/knoiren-svg@main/open.svg
 ```
-
-These wont be blocked because it would break real school sites. <br>
 
 <br>
 <br>
