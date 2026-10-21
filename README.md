@@ -16,6 +16,9 @@ Zero-dependency!
 
 </div>
 
+<br>
+<br>
+
 ## Running statically through wisp
 
 ### Structure
@@ -54,6 +57,9 @@ https://cdn.statically.io/gh/ltorl/knoiren-svg@main/open.svg
 
 These wont be blocked because it would break real school sites. <br>
 
+<br>
+<br>
+<br>
 <br>
 
 ## Running through node backend
@@ -105,6 +111,9 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 </details>
 
 <br>
+<br>
+<br>
+<br>
 
 ## Features
 
@@ -118,7 +127,6 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 - **Mute tabs**: a speaker shows on tabs playing sound; click it to silence the tab
 - **Smart address bar**: type a URL or search DuckDuckGo, with live suggestions
 - **Bookmarks bar**: star any page, and **bookmarklets** run inside the page
-- **Games sidebar**: a built-in list of game sites, one click away
 - **Pop-up control**: links open as new tabs, and scripted pop-ups ask first
 - **Close warning**: will stop teacher from closing it through an extension
 
@@ -140,7 +148,14 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 
 <br>
 
-## How it works
+
+
+<br>
+
+<details>
+<summary>
+<h2>How it works - node server</h2>
+</summary>
 
 ```
                  ┌────────────────────────────┐
@@ -160,7 +175,7 @@ Everything lives in **`index.js`**: both HTTP servers, the proxy, an HTML rewrit
 
 <br>
 
-## Configuration
+### Configuration 
 
 Everything is optional. Set these as environment variables:
 
@@ -170,9 +185,12 @@ Everything is optional. Set these as environment variables:
 | `PORT`         | `8787`    | Port for the proxy                                                           |
 | `HOST`         | `0.0.0.0` | Interface both servers listen on                                             |
 
+</details>
 
 <details>
-<summary><b>Embedding the proxy in your own site</b></summary>
+<summary> 
+<h2>Embedding the proxy in your own site</h2>
+</summary>
 
 <br>
 
@@ -186,8 +204,3 @@ This will use `wss://anura.pro`. This is the same proxying logic used in this si
 
 </details>
 
-<br>
-
-## License
-
-[GPL-3.0](LICENSE)
