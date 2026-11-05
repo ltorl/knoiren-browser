@@ -3178,8 +3178,9 @@ const UI_HTML = `<!DOCTYPE html>
         /* No WebGL: a still of roughly the same picture. */
         #bg-canvas.nogl {
             background:
+                radial-gradient(120% 78% at 50% 128%, transparent 0%, var(--bg-shape-tint-overlay, transparent) 22%, var(--bg-shape-tint-overlay, transparent) 56%, transparent 82%),
                 radial-gradient(120% 78% at 50% 128%, rgba(120, 220, 205, 0.30) 0%, rgba(96, 120, 240, 0.55) 22%, rgba(78, 56, 160, 0.55) 44%, rgba(0, 0, 0, 0) 68%),
-                #000;
+                var(--bg-backdrop-base, #000);
         }
 
         #app > #tabbar,
@@ -3889,6 +3890,35 @@ const UI_HTML = `<!DOCTYPE html>
             cursor: pointer;
         }
 
+        .set-range-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text);
+            font-size: 0.88rem;
+        }
+
+        .set-range-row span:first-child {
+            flex: 0 0 105px;
+        }
+
+        .set-range-row input[type="range"] {
+            flex: 1 1 auto;
+            min-width: 40px;
+            accent-color: #788cff;
+        }
+
+        .set-range-row output {
+            flex: 0 0 42px;
+            color: var(--muted);
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+
         .set-status {
             display: flex;
             align-items: center;
@@ -4445,6 +4475,11 @@ precision highp float;
 uniform vec2  uRes;
 uniform float uTime;
 uniform vec2  uSeed;
+uniform float uBlue;
+uniform vec3  uTint;
+uniform float uTintAmount;
+uniform vec3  uBgTint;
+uniform float uBgTintAmount;
 
 float hash(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -4507,7 +4542,7 @@ void main() {
     float g = smoothstep(0.18, 0.78, f);
     float b = smoothstep(0.45, 0.95, r.x + 0.25 * f);
     vec3 col = mix(deep, violet, g);
-    col = mix(col, blue, b * 0.55);
+    col = mix(col, blue, b * uBlue);
     col = mix(col, teal, rim * smoothstep(0.40, 0.85, f) * 0.95);
 
     // Light pools in some folds and leaves others in shadow, the way the sheet
@@ -4515,6 +4550,8 @@ void main() {
     float pool = smoothstep(0.1, 0.9, fbm(p * 0.7 + 1.3 * r + vec2(0.0, t * 0.022)));
     float lum = body * (0.22 + 0.80 * pool + 0.35 * g) + rim * 0.85;
     col = col * lum + col * halo * 0.20;
+    col = mix(col, uTint, uTintAmount * body);
+    col = mix(col, uBgTint, uBgTintAmount * (1.0 - body));
 
     // Dither, so the long gradients do not band.
     col += (hash(gl_FragCoord.xy + uSeed) - 0.5) / 220.0;
@@ -5238,14 +5275,92 @@ void main() {
         // clock is never wrapped and the seed is drawn once per launch, so this
         // is not a loop -- no two runs, and no two moments, repeat.
         const BG_PAUSE_KEY = 'knoiren-bg-paused';
+        const BG_TINT_KEY = 'knoiren-bg-tint';
+        const BG_TINT_AMOUNT_KEY = 'knoiren-bg-tint-amount';
+        const BG_BLUE_KEY = 'knoiren-bg-blue';
+        const BG_BACKDROP_TINT_KEY = 'knoiren-bg-backdrop-tint';
+        const BG_BACKDROP_TINT_AMOUNT_KEY = 'knoiren-bg-backdrop-tint-amount';
         let bgPaused = false;
-        try { bgPaused = localStorage.getItem(BG_PAUSE_KEY) === '1'; } catch (e) { }
+        let bgTint = '#ffffff';
+        let bgTintAmount = 0;
+        let bgBlue = 55;
+        let bgBackdropTint = '#080a12';
+        let bgBackdropTintAmount = 0;
+        try {
+            bgPaused = localStorage.getItem(BG_PAUSE_KEY) === '1';
+            const savedTint = localStorage.getItem(BG_TINT_KEY);
+            const savedTintAmount = localStorage.getItem(BG_TINT_AMOUNT_KEY);
+            const savedBlue = localStorage.getItem(BG_BLUE_KEY);
+            const savedBackdropTint = localStorage.getItem(BG_BACKDROP_TINT_KEY);
+            const savedBackdropTintAmount = localStorage.getItem(BG_BACKDROP_TINT_AMOUNT_KEY);
+            if (/^#[0-9a-f]{6}$/i.test(savedTint || '')) bgTint = savedTint;
+            if (savedTintAmount !== null && Number.isFinite(Number(savedTintAmount))) bgTintAmount = Math.max(0, Math.min(100, Number(savedTintAmount)));
+            if (savedBlue !== null && Number.isFinite(Number(savedBlue))) bgBlue = Math.max(0, Math.min(100, Number(savedBlue)));
+            if (/^#[0-9a-f]{6}$/i.test(savedBackdropTint || '')) bgBackdropTint = savedBackdropTint;
+            if (savedBackdropTintAmount !== null && Number.isFinite(Number(savedBackdropTintAmount))) bgBackdropTintAmount = Math.max(0, Math.min(100, Number(savedBackdropTintAmount)));
+        } catch (e) { }
         let bgKick = null;
+
+        function colorRgb(color) {
+            return [1, 3, 5].map(i => parseInt(color.slice(i, i + 2), 16) / 255);
+        }
+
+        function tintRgb() {
+            return colorRgb(bgTint);
+        }
+
+        function updateFallbackTint(canvas) {
+            const [sr, sg, sb] = tintRgb().map(v => Math.round(v * 255));
+            const [br, bg, bb] = colorRgb(bgBackdropTint).map(v => Math.round(v * 255));
+            canvas.style.setProperty('--bg-shape-tint-overlay', 'rgba(' + sr + ', ' + sg + ', ' + sb + ', ' + (bgTintAmount / 100) + ')');
+            const strength = bgBackdropTintAmount / 100;
+            const hex = [br, bg, bb].map(v => Math.round(v * strength).toString(16).padStart(2, '0')).join('');
+            canvas.style.setProperty('--bg-backdrop-base', '#' + hex);
+        }
+
+        function redrawBackground() {
+            const canvas = document.getElementById('bg-canvas');
+            if (canvas) updateFallbackTint(canvas);
+            if (bgKick) bgKick();
+        }
+
+        function setBackgroundTint(color) {
+            if (!/^#[0-9a-f]{6}$/i.test(color || '')) return;
+            bgTint = color.toLowerCase();
+            try { localStorage.setItem(BG_TINT_KEY, bgTint); } catch (e) { }
+            redrawBackground();
+        }
+
+        function setBackgroundTintAmount(amount) {
+            bgTintAmount = Math.max(0, Math.min(100, Number(amount) || 0));
+            try { localStorage.setItem(BG_TINT_AMOUNT_KEY, String(bgTintAmount)); } catch (e) { }
+            redrawBackground();
+        }
+
+        function setBackgroundBlue(amount) {
+            bgBlue = Math.max(0, Math.min(100, Number(amount) || 0));
+            try { localStorage.setItem(BG_BLUE_KEY, String(bgBlue)); } catch (e) { }
+            redrawBackground();
+        }
+
+        function setBackdropTint(color) {
+            if (!/^#[0-9a-f]{6}$/i.test(color || '')) return;
+            bgBackdropTint = color.toLowerCase();
+            try { localStorage.setItem(BG_BACKDROP_TINT_KEY, bgBackdropTint); } catch (e) { }
+            redrawBackground();
+        }
+
+        function setBackdropTintAmount(amount) {
+            bgBackdropTintAmount = Math.max(0, Math.min(100, Number(amount) || 0));
+            try { localStorage.setItem(BG_BACKDROP_TINT_AMOUNT_KEY, String(bgBackdropTintAmount)); } catch (e) { }
+            redrawBackground();
+        }
 
         function startBackground() {
             const canvas = document.getElementById('bg-canvas');
             const frag = document.getElementById('bg-frag');
             if (!canvas || !frag) return;
+            updateFallbackTint(canvas);
 
             let gl = null;
             try {
@@ -5287,6 +5402,11 @@ void main() {
             const uRes = gl.getUniformLocation(prog, 'uRes');
             const uTime = gl.getUniformLocation(prog, 'uTime');
             const uSeed = gl.getUniformLocation(prog, 'uSeed');
+            const uBlue = gl.getUniformLocation(prog, 'uBlue');
+            const uTint = gl.getUniformLocation(prog, 'uTint');
+            const uTintAmount = gl.getUniformLocation(prog, 'uTintAmount');
+            const uBgTint = gl.getUniformLocation(prog, 'uBgTint');
+            const uBgTintAmount = gl.getUniformLocation(prog, 'uBgTintAmount');
             gl.uniform2f(uSeed, Math.random() * 100, Math.random() * 100);
 
             // Half resolution: the field holds no detail finer than that, and
@@ -5312,6 +5432,11 @@ void main() {
                 last = now;
                 size();
                 gl.uniform1f(uTime, clock);
+                gl.uniform1f(uBlue, bgBlue / 100);
+                gl.uniform3fv(uTint, tintRgb());
+                gl.uniform1f(uTintAmount, bgTintAmount / 100);
+                gl.uniform3fv(uBgTint, colorRgb(bgBackdropTint));
+                gl.uniform1f(uBgTintAmount, bgBackdropTintAmount / 100);
                 gl.drawArrays(gl.TRIANGLES, 0, 3);
                 if (!bgPaused) raf = requestAnimationFrame(frame);
             };
@@ -5559,7 +5684,7 @@ void main() {
         }
 
         function buildBackgroundSection(inner) {
-            inner.appendChild(settingsSection('Background'));
+            inner.appendChild(settingsSection('New page background'));
 
             [
                 { paused: false, name: 'Animated', desc: 'The background drifts on its own, from a seed drawn fresh every time the browser starts.' },
@@ -5584,6 +5709,71 @@ void main() {
                 row.addEventListener('click', () => setBgPaused(opt.paused));
                 inner.appendChild(row);
             });
+
+            const tintRow = document.createElement('label');
+            tintRow.className = 'set-color-row';
+            const tintLabel = document.createElement('span');
+            tintLabel.textContent = 'Moving shape tint';
+            const tintControl = document.createElement('span');
+            tintControl.className = 'set-color-control';
+            const tintChange = document.createElement('span');
+            tintChange.className = 'set-color-change';
+            tintChange.textContent = 'Choose color';
+            const tintInput = document.createElement('input');
+            tintInput.type = 'color';
+            tintInput.value = bgTint;
+            tintInput.setAttribute('aria-label', 'Moving shape tint');
+            tintInput.addEventListener('input', () => setBackgroundTint(tintInput.value));
+            tintControl.append(tintChange, tintInput);
+            tintRow.append(tintLabel, tintControl);
+            inner.appendChild(tintRow);
+
+            const rangeRow = (title, value, onInput, ariaLabel) => {
+                const row = document.createElement('label');
+                row.className = 'set-range-row';
+                const label = document.createElement('span');
+                label.textContent = title;
+                const input = document.createElement('input');
+                input.type = 'range';
+                input.min = '0';
+                input.max = '100';
+                input.value = String(value);
+                input.setAttribute('aria-label', ariaLabel);
+                const output = document.createElement('output');
+                output.textContent = input.value + '%';
+                input.addEventListener('input', () => {
+                    output.textContent = input.value + '%';
+                    onInput(input.value);
+                });
+                row.append(label, input, output);
+                inner.appendChild(row);
+            };
+            rangeRow('Shape tint strength', bgTintAmount, setBackgroundTintAmount, 'Moving shape tint strength');
+            rangeRow('Blue intensity', bgBlue, setBackgroundBlue, 'Moving shape blue intensity');
+
+            const backdropRow = document.createElement('label');
+            backdropRow.className = 'set-color-row';
+            const backdropLabel = document.createElement('span');
+            backdropLabel.textContent = 'Shape background color';
+            const backdropControl = document.createElement('span');
+            backdropControl.className = 'set-color-control';
+            const backdropChange = document.createElement('span');
+            backdropChange.className = 'set-color-change';
+            backdropChange.textContent = 'Choose color';
+            const backdropInput = document.createElement('input');
+            backdropInput.type = 'color';
+            backdropInput.value = bgBackdropTint;
+            backdropInput.setAttribute('aria-label', 'Shape background color');
+            backdropInput.addEventListener('input', () => setBackdropTint(backdropInput.value));
+            backdropControl.append(backdropChange, backdropInput);
+            backdropRow.append(backdropLabel, backdropControl);
+            inner.appendChild(backdropRow);
+            rangeRow('Background strength', bgBackdropTintAmount, setBackdropTintAmount, 'Shape background color strength');
+
+            const note = document.createElement('div');
+            note.className = 'set-note';
+            note.textContent = 'Shape tint and blue intensity affect only the moving shape. Shape background color controls the darker area behind it.';
+            inner.appendChild(note);
         }
 
         function buildToolbarSection(inner) {
