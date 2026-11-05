@@ -28,6 +28,10 @@
             --text: #e8e8e8;
             --muted: #9aa0a6;
             --trash-icon: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>');
+            /* Toolbar chrome. Settings can swap these for one flat colour. */
+            --chrome-tabbar-bg: rgba(0, 0, 0, 0.58);
+            --chrome-toolbar-bg: rgba(46, 48, 56, 0.52);
+            --chrome-blur: blur(22px) saturate(150%);
         }
 
         * {
@@ -87,9 +91,9 @@
             display: flex;
             align-items: flex-end;
             height: 40px;
-            background: rgba(0, 0, 0, 0.58);
-            backdrop-filter: blur(22px) saturate(150%);
-            -webkit-backdrop-filter: blur(22px) saturate(150%);
+            background: var(--chrome-tabbar-bg);
+            backdrop-filter: var(--chrome-blur);
+            -webkit-backdrop-filter: var(--chrome-blur);
             padding: 0 6px 0 40px;
             gap: 0;
             flex: 0 0 auto;
@@ -100,6 +104,45 @@
 
         #app.chrome-hidden #tabbar {
             max-height: 0;
+        }
+
+        /* Settings > Toolbar background. The class is toggled on <html>, and
+           !important keeps a stray theme or extension from putting the image
+           back behind the chrome. */
+        html.chrome-solid #tabbar {
+            background: var(--chrome-solid-bg, #2e3038) !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+
+        /* The URL bar takes the active tab's colour, so the selected tab and
+           the toolbar below it read as one continuous surface. */
+        html.chrome-solid #toolbar {
+            background: var(--chrome-solid-tab-active-bg, #2a2c34) !important;
+            backdrop-filter: none !important;
+            -webkit-backdrop-filter: none !important;
+        }
+
+        /* Tabs sit a little darker than the toolbar, with the active tab a
+           touch lighter so it still reads as the selected one. */
+        html.chrome-solid .tab {
+            background: var(--chrome-solid-tab-bg, #26272e) !important;
+        }
+
+        html.chrome-solid .tab:not(.active):hover::before {
+            background: var(--chrome-solid-tab-hover-bg, #282a31) !important;
+        }
+
+        html.chrome-solid .tab.active {
+            background: var(--chrome-solid-tab-active-bg, #2a2c34) !important;
+        }
+
+        html.chrome-solid .tab.active::before {
+            background: radial-gradient(circle at top left, transparent 8px, var(--chrome-solid-tab-active-bg, #2a2c34) 8px) !important;
+        }
+
+        html.chrome-solid .tab.active::after {
+            background: radial-gradient(circle at top right, transparent 8px, var(--chrome-solid-tab-active-bg, #2a2c34) 8px) !important;
         }
 
 
@@ -349,9 +392,9 @@
         }
 
         #toolbar {
-            background: rgba(46, 48, 56, 0.52);
-            backdrop-filter: blur(22px) saturate(150%);
-            -webkit-backdrop-filter: blur(22px) saturate(150%);
+            background: var(--chrome-toolbar-bg);
+            backdrop-filter: var(--chrome-blur);
+            -webkit-backdrop-filter: var(--chrome-blur);
             flex: 0 0 auto;
             overflow: hidden;
             transition: height 0.25s ease;
@@ -644,6 +687,54 @@
             line-height: 1.45;
             color: var(--muted);
             margin-top: 3px;
+        }
+
+        .set-color-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.06);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: var(--text);
+            font-size: 0.88rem;
+            cursor: pointer;
+        }
+
+        .set-color-row:hover {
+            background: rgba(255, 255, 255, 0.11);
+        }
+
+        .set-color-control {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .set-color-change {
+            padding: 6px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.14);
+            background: rgba(255, 255, 255, 0.06);
+            font-size: 0.8rem;
+            color: var(--text);
+        }
+
+        .set-color-row:hover .set-color-change {
+            background: rgba(255, 255, 255, 0.12);
+        }
+
+        .set-color-row input[type="color"] {
+            flex: 0 0 auto;
+            width: 46px;
+            height: 30px;
+            padding: 0;
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            border-radius: 7px;
+            background: transparent;
+            cursor: pointer;
         }
 
         .set-status {
@@ -2594,6 +2685,62 @@ void main() {
             renderAllSettings();
         }
 
+        // ---- Toolbar background -------------------------------------------
+        // The tab bar and toolbar are translucent by default, so the animated
+        // background blurs through them. Settings can replace that with one
+        // opaque colour for people who want the chrome to stay flat.
+        const CHROME_MODE_KEY = 'knoiren-toolbar-mode';
+        const CHROME_COLOR_KEY = 'knoiren-toolbar-color';
+        let chromeMode = 'blur';
+        let chromeColor = '#2e3038';
+        try {
+            chromeMode = localStorage.getItem(CHROME_MODE_KEY) === 'solid' ? 'solid' : 'blur';
+            const savedColor = localStorage.getItem(CHROME_COLOR_KEY);
+            if (/^#[0-9a-f]{6}$/i.test(savedColor || '')) chromeColor = savedColor;
+        } catch (e) { }
+
+        function applyChromeMode() {
+            const root = document.documentElement;
+            const solid = chromeMode === 'solid';
+            root.classList.toggle('chrome-solid', solid);
+            if (solid) {
+                root.style.setProperty('--chrome-solid-bg', chromeColor);
+                root.style.setProperty('--chrome-solid-tab-bg', shadeColor(chromeColor, 0.82));
+                root.style.setProperty('--chrome-solid-tab-hover-bg', shadeColor(chromeColor, 0.88));
+                root.style.setProperty('--chrome-solid-tab-active-bg', shadeColor(chromeColor, 0.92));
+            } else {
+                root.style.removeProperty('--chrome-solid-bg');
+                root.style.removeProperty('--chrome-solid-tab-bg');
+                root.style.removeProperty('--chrome-solid-tab-hover-bg');
+                root.style.removeProperty('--chrome-solid-tab-active-bg');
+            }
+        }
+
+        // Multiplies an #rrggbb colour towards black, keeping it in the same hue.
+        function shadeColor(hex, factor) {
+            const n = parseInt(hex.slice(1), 16);
+            const r = Math.round(((n >> 16) & 255) * factor);
+            const g = Math.round(((n >> 8) & 255) * factor);
+            const b = Math.round((n & 255) * factor);
+            return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+        }
+
+        function setChromeMode(mode) {
+            chromeMode = mode === 'solid' ? 'solid' : 'blur';
+            try { localStorage.setItem(CHROME_MODE_KEY, chromeMode); } catch (e) { }
+            applyChromeMode();
+            renderAllSettings();
+        }
+
+        // Called on every colour input, so it deliberately does not redraw the
+        // settings page: doing that would replace the picker mid-drag.
+        function setChromeColor(color) {
+            if (!/^#[0-9a-f]{6}$/i.test(color || '')) return;
+            chromeColor = color.toLowerCase();
+            try { localStorage.setItem(CHROME_COLOR_KEY, chromeColor); } catch (e) { }
+            if (chromeMode === 'solid') applyChromeMode();
+        }
+
         function buildNewtab(tab) {
             const nt = document.createElement('div');
             nt.className = 'newtab';
@@ -3042,6 +3189,62 @@ void main() {
             });
         }
 
+        function buildToolbarSection(inner) {
+            inner.appendChild(settingsSection('Toolbar background'));
+
+            [
+                { mode: 'blur', name: 'Blurred', desc: 'The background shows through the tab bar and toolbar, blurred.' },
+                { mode: 'solid', name: 'Solid color', desc: 'The tab bar and toolbar are painted one flat colour instead of showing the background.' },
+            ].forEach(opt => {
+                const row = document.createElement('div');
+                row.className = 'set-option' + (chromeMode === opt.mode ? ' selected' : '');
+
+                const radio = document.createElement('span');
+                radio.className = 'set-radio';
+
+                const body = document.createElement('div');
+                const name = document.createElement('div');
+                name.className = 'set-name';
+                name.textContent = opt.name;
+                const desc = document.createElement('div');
+                desc.className = 'set-desc';
+                desc.textContent = opt.desc;
+                body.append(name, desc);
+
+                row.append(radio, body);
+                row.addEventListener('click', () => setChromeMode(opt.mode));
+                inner.appendChild(row);
+            });
+
+            const row = document.createElement('label');
+            row.className = 'set-color-row';
+
+            const label = document.createElement('span');
+            label.textContent = 'Toolbar color';
+
+            const control = document.createElement('span');
+            control.className = 'set-color-control';
+
+            const change = document.createElement('span');
+            change.className = 'set-color-change';
+            change.textContent = 'Change color';
+
+            const input = document.createElement('input');
+            input.type = 'color';
+            input.value = chromeColor;
+            input.setAttribute('aria-label', 'Toolbar color');
+            input.addEventListener('input', () => setChromeColor(input.value));
+
+            control.append(change, input);
+            row.append(label, control);
+            inner.appendChild(row);
+
+            const note = document.createElement('div');
+            note.className = 'set-note';
+            note.textContent = 'Used when Solid color is selected. Tabs are drawn slightly darker than the toolbar.';
+            inner.appendChild(note);
+        }
+
         function renderSettings(tab) {
             if (!tab.settingsEl) return;
             const inner = tab.settingsEl.querySelector('.set-inner');
@@ -3057,6 +3260,7 @@ void main() {
             buildBlankSection(inner);
             buildFaviconSection(inner);
             buildBackgroundSection(inner);
+            buildToolbarSection(inner);
             buildWindowSection(inner);
             buildMutedSection(inner);
         }
@@ -4134,6 +4338,7 @@ void main() {
 
         // Not the home page: the bootstrap is installing the worker and will
         // reload, so the UI stays out of the way until it does.
+        applyChromeMode();
         if (PX.home) {
             startBackground();
             renderBookmarks();
