@@ -5244,7 +5244,7 @@ void main() {
             const github = document.createElement('a');
             github.className = 'nt-github';
             github.href = 'https://github.com/ltorl/knoiren-browser/tree/main';
-            github.textContent = 'Github';
+            github.textContent = '';
             // Opens as a Knoiren tab, not a tab of the real browser.
             const openGithub = (e) => {
                 if (e.button > 1) return;
