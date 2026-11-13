@@ -1,6 +1,7 @@
 // Peekaboom (Node): serves any public site so it can be embedded in an <iframe>.
 //
 //   node index.js              (Node 20+, no dependencies)
+//   node index.js -proxy       proxy server only, no browser UI
 //   open http://localhost:8080/ for the Knoiren Browser UI
 //   <iframe src="https://<host>:8787/__px/https://example.com/"></iframe>
 //
@@ -15,7 +16,6 @@
 //
 // Everything is in this one file: the HTTP servers, the proxy, a small HTML
 // rewriter, the script injected into every page and the UI page.
-// This file doesn't rely on index.html or proxy.js; it is a combination of the two. 
 import http from 'node:http';
 import https from 'node:https';
 import net from 'node:net';
@@ -36,6 +36,9 @@ const UI_PORT = Number(process.env.UI_PORT) || 8080;
 const PROXY_ORIGIN = process.env.PROXY_ORIGIN ? process.env.PROXY_ORIGIN.replace(/\/+$/, '') : null;
 // null: the UI server on the page's own host name (UI_PORT).
 const UI_ORIGINS = parseOrigins(process.env.UI_ORIGIN);
+// -proxy / --proxy (or PROXY_ONLY=1): serve only the proxy, not the browser UI.
+const PROXY_ONLY = process.argv.slice(2).some((a) => a === '-proxy' || a === '--proxy') ||
+  /^(1|true|yes)$/i.test(process.env.PROXY_ONLY || '');
 const PREFIX = '/__px/';
 const ORIGIN_COOKIE = '__px_origin';
 
@@ -3047,15 +3050,15 @@ const uiServer = http.createServer(async (req, res) => {
 
 // Imported (e.g. by index.test.js) it only provides the exports below. Run
 // directly, or piped in (`curl … | node`, where there is no script path), it serves.
-if (isMainThread && (!process.argv[1] || import.meta.url === pathToFileURL(process.argv[1]).href)) {
+if (isMainThread && (!process.argv[1] || process.argv[1] === '-' || import.meta.url === pathToFileURL(process.argv[1]).href)) {
   let listening = 0;
-  const ready = () => { if (++listening === 2) console.log(banner()); };
+  const ready = () => { if (++listening === (PROXY_ONLY ? 1 : 2)) console.log(banner()); };
   server.listen(PORT, HOST, () => {
     ready();
     // Start the rewriting workers now rather than on the first big script.
     if (WORKER_URL) while (pool.length < POOL_SIZE) spawnWorker();
   });
-  uiServer.listen(UI_PORT, HOST, ready);
+  if (!PROXY_ONLY) uiServer.listen(UI_PORT, HOST, ready);
 }
 
 // A rewriting worker (see runInWorker): CSS / JS in, UTF-8 bytes out.
@@ -3093,7 +3096,7 @@ function banner() {
     ...logo.map(l => '  ' + shade(l)),
     dim('  proxy browser'),
     '',
-    row(rgb(74, 222, 128)('●'), 'Open', uiUrl),
+    ...(PROXY_ONLY ? [] : [row(rgb(74, 222, 128)('●'), 'Open', uiUrl)]),
     row(rgb(96, 165, 250)('●'), 'Proxy', proxyUrl),
     '',
     dim('  Ctrl+C to stop'),
