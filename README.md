@@ -99,7 +99,7 @@ Then open **http://localhost:8080**.
 ### Using proxy for your own server
 
 ```bash
-curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | node -proxy
+curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | node - -proxy
 ```
 This will just run the proxy. 
 
