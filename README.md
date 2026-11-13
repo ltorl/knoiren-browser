@@ -4,7 +4,7 @@
 
 ### A whole web browser and proxy in one file.
 
-Tabs, bookmarks, games, and a proxy with compatibility close to Scramjet and Ultraviolet.<br>
+Tabs, bookmarks, games, and a proxy with compatibility better than Scramjet and Ultraviolet.<br>
 Zero-dependency!
 
 <br>
@@ -147,22 +147,41 @@ curl -sL https://cdn.jsdelivr.net/gh/ltorl/knoiren-browser/index.js | PORT=9000 
 ### The browser
 
 - **Real tabs**: drag to reorder, pin, duplicate, close others / left / right
-- **Mute tabs**: a speaker shows on tabs playing sound; click it to silence the tab
-- **Bookmarks bar**: star any page, and **bookmarklets** run inside the page
-- **Pop-up control**: links open as new tabs, and scripted pop-ups ask first
-- **Close warning**: will stop teacher from closing it through an extension
+
 <br>
+
+- **Mute tabs**: a speaker shows on tabs playing sound; click it to silence the tab
+
+<br>
+
+- **Bookmarks bar**: star any page, and **bookmarklets** run inside the page
+
+<br>
+
+- **Pop-up control**: links open as new tabs, and scripted pop-ups ask first
+
+<br>
+
+- **Close warning**: will stop teacher from closing it through an extension
+
+<br>
+
 </td>
 <td width="50%" valign="top">
 
 ### The Peekaboom proxy
-
+#### Best proxy on the web because:
 - Rewrites **HTML, CSS and JavaScript** as you are actively browsing
 - Handles **WebSockets**, **EventSource**, **sendBeacon** and **workers**
 - A **service worker** gets requests past the rewriter
 - Keeps each site's **cookies** apart
 - Patches `location`, `document.domain`, `top` / `parent` so sites think they're at home
 - Mutes **audio, video, Web Audio and speech**, even inside shadow DOM and nested frames
+<br>
+These make it support almost all sites just like a regular browser. The only sites that it can't support are ones that specifically look for node's TLS signature which no proxy can evade.
+
+<br>
+<br>
 
 </td>
 </tr>
